@@ -149,7 +149,8 @@ def train(
 
     if not use_quantization:
         quantization_config=None
-    print(f'use_quantization={use_quantization}, {quantization_config}')
+    print(f'\n use_quantization={use_quantization}\n quantization_config={quantization_config}\n')
+    
     if llama_version == 'llama3.1-8b':
         llm = LLM(
             model_name='meta-llama/Llama-3.1-8B-Instruct',
@@ -160,19 +161,9 @@ def train(
             model_name='meta-llama/Llama-3.2-1B-Instruct',
             quantization_config=quantization_config,
         )
-    elif llama_version == 'llama3.2-1b-int4':
-        llm = LLM(
-            model_name='meta-llama/Llama-3.2-3B-Instruct-QLORA_INT4_EO8',
-            quantization_config=quantization_config,
-        )
     elif llama_version == 'llama3.2-3b':
         llm = LLM(
             model_name='meta-llama/Llama-3.2-3B-Instruct',
-            quantization_config=quantization_config,
-        )
-    elif llama_version == 'llama3.2-3b-int4':
-        llm = LLM(
-            model_name='meta-llama/Llama-3.2-3B-Instruct-QLORA_INT4_EO8',
             quantization_config=quantization_config,
         )
     
@@ -299,9 +290,9 @@ if __name__ == '__main__':
     parser.add_argument('--eval_batch_size', type=int, default=16)
     parser.add_argument('--checkpointing', action='store_true')
     parser.add_argument('--llama_version', type=str, required=True)
-    parser.add_argument('--retrieval_config_version', type=int, required=True)
-    parser.add_argument('--algo_config_version', type=int, required=True)
-    parser.add_argument('--g_retriever_config_version', type=int, required=True)
+    parser.add_argument('--retrieval_config_version', type=int, default=0)
+    parser.add_argument('--algo_config_version', type=int, default=0)
+    parser.add_argument('--g_retriever_config_version', type=int, default=0)
     parser.add_argument('--freeze_llm', type=bool, default=False)
     parser.add_argument('--use_lora', type=bool, default=False)
     parser.add_argument('--use_quantization', type=bool, default=False)
