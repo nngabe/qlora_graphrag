@@ -16,8 +16,8 @@ from peft import LoraConfig
 from transformers import BitsAndBytesConfig
 from tqdm import tqdm
 
-from gretriever.LLM import LLM
-from gretriever.GRetriever import GRetriever
+from LLM import LLM
+from GRetriever import GRetriever
 
 from gretriever.compute_metrics import compute_metrics
 
