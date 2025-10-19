@@ -6,3 +6,4 @@ db.env/
 *.pt
 __pycache__/
 gretriever/
+logs/1*

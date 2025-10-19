@@ -128,13 +128,13 @@ def train(
         os.makedirs(f'{root_path}/models', exist_ok=True)
 
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                              drop_last=True, pin_memory=True, shuffle=True,
+                              drop_last=True, pin_memory=False, shuffle=True,
                               generator=torch.Generator(device=torch.get_default_device().type))
     val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
-                            drop_last=False, pin_memory=True, shuffle=False, 
+                            drop_last=False, pin_memory=False, shuffle=False,
                             generator=torch.Generator(device=torch.get_default_device().type))
     test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
-                             drop_last=False, pin_memory=True, shuffle=False, 
+                             drop_last=False, pin_memory=False, shuffle=False,
                              generator=torch.Generator(device=torch.get_default_device().type))
 
     gnn = GAT(
@@ -150,6 +150,10 @@ def train(
     if not use_quantization:
         quantization_config=None
     print(f'\n use_quantization={use_quantization}\n quantization_config={quantization_config}\n')
+    
+    if not use_lora:
+        lora_config=None
+    print(f'\n use_lora={use_lora}\n lora_config={lora_config}\n')
     
     if llama_version == 'llama3.1-8b':
         llm = LLM(
@@ -167,13 +171,14 @@ def train(
             quantization_config=quantization_config,
         )
     
-    llm.device = torch.get_default_device()
-    llm = llm.to(torch.get_default_device().type)
-    llm.llm = llm.llm.to(torch.get_default_device().type)
-    llm.word_embedding = llm.llm.model.get_input_embeddings()
-    print(llm.word_embedding(torch.tensor(1)))
+#    llm.device = torch.get_default_device()
+#    llm = llm.to(torch.get_default_device().type)
+#    llm.llm = llm.llm.to(torch.get_default_device().type)
+#    llm.word_embedding = llm.llm.model.get_input_embeddings()
+#    print(llm.word_embedding(torch.tensor(1)))
 
     if args.freeze_llm:
+        print(f'freeze_llm={args.freeze_llm}, freezing llm... \n')
         for param in llm.parameters():
             param.requires_grad = False
 
@@ -285,7 +290,7 @@ if __name__ == '__main__':
     parser.add_argument('--gnn_hidden_channels', type=int, default=1536)
     parser.add_argument('--num_gnn_layers', type=int, default=4)
     parser.add_argument('--lr', type=float, default=1e-5)
-    parser.add_argument('--epochs', type=int, default=2)
+    parser.add_argument('--epochs', type=int, default=3)
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--eval_batch_size', type=int, default=16)
     parser.add_argument('--checkpointing', action='store_true')
@@ -293,9 +298,12 @@ if __name__ == '__main__':
     parser.add_argument('--retrieval_config_version', type=int, default=0)
     parser.add_argument('--algo_config_version', type=int, default=0)
     parser.add_argument('--g_retriever_config_version', type=int, default=0)
-    parser.add_argument('--freeze_llm', type=bool, default=False)
-    parser.add_argument('--use_lora', type=bool, default=False)
-    parser.add_argument('--use_quantization', type=bool, default=False)
+    parser.add_argument('--freeze_llm', action='store_true') 
+    parser.add_argument('--use_lora', action='store_true')
+    parser.add_argument('--use_quantization', action='store_true')
+    parser.add_argument('--lora_rank', type=int, default=8)
+    parser.add_argument('--lora_alpha', type=int, default=16)
+    parser.add_argument('--init_lora_weights', type=str, default=True)
     parser.add_argument('--device', type=str, required=True)
     args = parser.parse_args()
     load_dotenv('db.env', override=True)
@@ -303,9 +311,10 @@ if __name__ == '__main__':
     torch.set_default_device(args.device)
 
     lora_config = LoraConfig(
-        r=8,
-        lora_alpha=16,
-        target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+        init_lora_weights=args.init_lora_weights,
+        r=args.lora_rank,
+        lora_alpha=args.lora_alpha,
+        target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
         lora_dropout=0.05,
         bias="none",
         task_type="CAUSAL_LM"
