@@ -7,5 +7,6 @@
 #--checkpointing  --device cuda --llama_version llama3.2-3b --use_lora --lora_rank 256 --lora_alpha 128
 #--checkpointing  --device cuda --llama_version llama3.2-1b 
 #--checkpointing  --device cuda --llama_version llama3.2-3b --use_quantization
+--checkpointing  --device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 1024 --lora_alpha 512
 --checkpointing  --device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 512 --lora_alpha 256
 --checkpointing  --device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 256 --lora_alpha 128

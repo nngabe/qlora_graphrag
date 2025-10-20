@@ -210,21 +210,24 @@ def train(
             print("Training beginning...")
         epoch_str = f'Epoch: {epoch + 1}|{num_epochs}'
         loader = tqdm(train_loader, desc=epoch_str)
-
+        
         for step, batch in enumerate(loader):
             batch = batch.to(torch.get_default_device().type)
             optimizer.zero_grad()
             loss = get_loss(model, batch, model_save_name)
             loss.backward()
-
+            
             clip_grad_norm_(optimizer.param_groups[0]['params'], 0.1)
 
             if (step + 1) % grad_steps == 0:
                 adjust_learning_rate(optimizer.param_groups[0], lr,
                                      step / len(train_loader) + epoch)
-
             optimizer.step()
             epoch_loss = epoch_loss + float(loss)
+            
+            if (step%100)==0:
+                if torch.cuda.is_available():
+                    print(f'max_memory_allocated({step}/{loader.total}): {torch.cuda.max_memory_allocated()/10**9:.2f} GB')
 
             if (step + 1) % grad_steps == 0:
                 lr = optimizer.param_groups[0]['lr']
@@ -246,7 +249,7 @@ def train(
             best_val_loss = val_loss
             best_epoch = epoch
             save_params_dict(model, f'{root_path}/models/{retrieval_config_version}_{algo_config_version}_{g_retriever_config_version}_{model_save_name}_best_val_loss_ckpt.pt')
-
+    
     #if llm.device.type == "cuda":
     #    torch.cuda.empty_cache()
     #    torch.cuda.reset_max_memory_allocated()
