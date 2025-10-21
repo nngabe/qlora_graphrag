@@ -136,6 +136,13 @@ def train(
     test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
                              drop_last=False, pin_memory=False, shuffle=False,
                              generator=torch.Generator(device=torch.get_default_device().type))
+    
+#    train_loader = DataLoader(train_dataset, batch_size=batch_size,
+#                              drop_last=True, pin_memory=False, shuffle=True)
+#    val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
+#                            drop_last=False, pin_memory=False, shuffle=False)
+#    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
+#                             drop_last=False, pin_memory=False, shuffle=False)
 
     gnn = GAT(
         in_channels=1536,
@@ -211,6 +218,9 @@ def train(
         epoch_str = f'Epoch: {epoch + 1}|{num_epochs}'
         loader = tqdm(train_loader, desc=epoch_str)
         
+        if torch.cuda.is_available():
+            torch.cuda.reset_max_memory_allocated()
+
         for step, batch in enumerate(loader):
             batch = batch.to(torch.get_default_device().type)
             optimizer.zero_grad()
@@ -235,6 +245,12 @@ def train(
         train_loss = epoch_loss / len(train_loader)
         print(epoch_str + f', Train Loss: {train_loss:4f}')
 
+        #if llm.device.type == "cuda":
+        #    if torch.cuda.is_available():
+        #        torch.cuda.empty_cache()
+        #        torch.cuda.reset_max_memory_allocated()
+
+
         val_loss = 0
         model.eval()
         with torch.no_grad():
@@ -250,9 +266,6 @@ def train(
             best_epoch = epoch
             save_params_dict(model, f'{root_path}/models/{retrieval_config_version}_{algo_config_version}_{g_retriever_config_version}_{model_save_name}_best_val_loss_ckpt.pt')
     
-    #if llm.device.type == "cuda":
-    #    torch.cuda.empty_cache()
-    #    torch.cuda.reset_max_memory_allocated()
 
     if checkpointing and best_epoch != num_epochs - 1:
         print("Loading best checkpoint...")
@@ -293,13 +306,13 @@ if __name__ == '__main__':
     parser.add_argument('--gnn_hidden_channels', type=int, default=1536)
     parser.add_argument('--num_gnn_layers', type=int, default=4)
     parser.add_argument('--lr', type=float, default=1e-5)
-    parser.add_argument('--epochs', type=int, default=3)
+    parser.add_argument('--epochs', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--eval_batch_size', type=int, default=16)
     parser.add_argument('--checkpointing', action='store_true')
     parser.add_argument('--llama_version', type=str, required=True)
     parser.add_argument('--retrieval_config_version', type=int, default=0)
-    parser.add_argument('--algo_config_version', type=int, default=0)
+    parser.add_argument('--algo_config_version', type=int, default=1)
     parser.add_argument('--g_retriever_config_version', type=int, default=0)
     parser.add_argument('--freeze_llm', action='store_true') 
     parser.add_argument('--use_lora', action='store_true')
