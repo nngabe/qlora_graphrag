@@ -1,21 +1,41 @@
-# fsdp.yaml
-#compute_environment: LOCAL_MACHINE
+# accelerate_config.yaml
+compute_environment: LOCAL_MACHINE                                                                                                                                           
+debug: false                                                                                                                                                                 
 distributed_type: FSDP
-#downcast_bf16: 'no'
+downcast_bf16: 'no'
+fsdp_config:
+  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+  fsdp_backward_prefetch: BACKWARD_PRE
+  fsdp_cpu_ram_efficient_loading: true
+  fsdp_forward_prefetch: false
+  fsdp_offload_params: true
+  fsdp_sharding_strategy: FULL_SHARD
+  fsdp_state_dict_type: SHARDED_STATE_DICT
+  fsdp_sync_module_states: true
+  fsdp_use_orig_params: false
+machine_rank: 0
+main_training_function: main
+mixed_precision: 'no'
+num_machines: 1
+num_processes: 2
+rdzv_backend: static
+same_network: true
+tpu_env: []
+tpu_use_cluster: false
+tpu_use_sudo: false
+use_cpu: false
+
+#compute_environment: LOCAL_MACHINE
+#distributed_type: FSDP
 #fsdp_config:
-  #fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
-  #fsdp_backward_prefetch: BACKWARD_PRE
-  #fsdp_offload_params: true # Set to true to offload parameters to CPU
-  #fsdp_cpu_ram_efficient_loading: true # Essential for efficient loading with QLoRA
-  #fsdp_sharding_strategy: FULL_SHARD
-  #fsdp_state_dict_type: SHARDED_STATE_DICT
-  #fsdp_transformer_layer_cls_to_wrap: LlamaDecoderLayer # For Llama models
-  #fsdp_use_orig_params: false # Set to false when using QLoRA
+#  fsdp_auto_wrap_policy: TRANSFORMER_BASED_WRAP
+#  fsdp_transformer_layer_cls_to_wrap: LlamaDecoderLayer
+#  fsdp_sharding_strategy: FULL_SHARD # You can try other sharding strategies as needed
+#  fsdp_ignored_modules: [ "model.gnn" ]
+#  fsdp_use_orig_params: true
 #machine_rank: 0
 #main_training_function: main
-#mixed_precision: bf16 # Use bf16 for mixed precision training
-num_machines: 1
-#rdzv_backend: static
-#same_network: true
-num_processes: 2
+#mixed_precision: bf16 # or fp16
+#num_machines: 1
+#num_processes: 1 # Based on your log
 #use_cpu: false

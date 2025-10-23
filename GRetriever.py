@@ -57,33 +57,6 @@ class GRetriever(torch.nn.Module):
         self.llm_generator = self.llm.llm
         print(f'accelerator: {accelerator.device}')
         print(f'llm: {llm.llm.device}')#,{gnn.device}') 
-        #print(f'word_embedding: {llm.word_embedding.type}')
-        #print(f'llm: {self.llm.llm}')
-        if use_lora:
-            from peft import (
-                LoraConfig,
-                get_peft_model,
-                prepare_model_for_kbit_training,
-            )
-            self.llm_generator = prepare_model_for_kbit_training(
-                self.llm_generator)
-            lora_r: int = 8
-            lora_alpha: int = 16
-            lora_dropout: float = 0.05
-            lora_target_modules = ['q_proj', 'v_proj']
-            if lora_config == None:
-                config = LoraConfig(
-                    r=lora_r,
-                    lora_alpha=lora_alpha,
-                    target_modules=lora_target_modules,
-                    lora_dropout=lora_dropout,
-                    bias='none',
-                    task_type='CAUSAL_LM',
-                )
-            else:
-                config = lora_config
-                self.llm_generator = get_peft_model(self.llm_generator, config)
-            print(f'lora_config: {config}')
 
         if self.gnn is not None:
             mlp_out_channels = llm.word_embedding.embedding_dim

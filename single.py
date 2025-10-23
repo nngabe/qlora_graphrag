@@ -16,8 +16,8 @@ from peft import LoraConfig
 from transformers import BitsAndBytesConfig
 from tqdm import tqdm
 
-from LLM import LLM
-from GRetriever import GRetriever
+from gretriever.LLM import LLM
+from gretriever.GRetriever import GRetriever
 
 from gretriever.compute_metrics import compute_metrics
 
@@ -61,6 +61,18 @@ def train(
     sys_prompt=None,
     num_gpus=None
 ):
+    def adjust_learning_rate(param_group, LR, epoch):
+        # Decay the learning rate with half-cycle cosine after warmup
+        min_lr = 5e-6
+        warmup_epochs = 1
+        if epoch < warmup_epochs:
+            lr = LR
+        else:
+            lr = min_lr + (LR - min_lr) * 0.5 * (
+                    1.0 + math.cos(math.pi * (epoch - warmup_epochs) /
+                                   (num_epochs - warmup_epochs)))
+        param_group['lr'] = lr
+        return lr
 
     start_time = time.time()
     qa_dataset = load_qa("prime")
@@ -99,22 +111,22 @@ def train(
         test_dataset = STaRKQADataset(root_path, qa_raw_test, retrieval_config_version, algo_config_version, split="test")
         os.makedirs(f'{root_path}/models', exist_ok=True)
 
-#    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-#                              drop_last=True, pin_memory=False, shuffle=True,
-#                              generator=torch.Generator(device=torch.get_default_device().type))
-#    val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
-#                            drop_last=False, pin_memory=False, shuffle=False,
-#                            generator=torch.Generator(device=torch.get_default_device().type))
-#    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
-#                             drop_last=False, pin_memory=False, shuffle=False,
-#                             generator=torch.Generator(device=torch.get_default_device().type))
-    
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                              drop_last=True, pin_memory=False, shuffle=True)
+                              drop_last=True, pin_memory=False, shuffle=True,
+                              generator=torch.Generator(device=torch.get_default_device().type))
     val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
-                            drop_last=False, pin_memory=False, shuffle=False)
+                            drop_last=False, pin_memory=False, shuffle=False,
+                            generator=torch.Generator(device=torch.get_default_device().type))
     test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
-                             drop_last=False, pin_memory=False, shuffle=False)
+                             drop_last=False, pin_memory=False, shuffle=False,
+                             generator=torch.Generator(device=torch.get_default_device().type))
+    
+#    train_loader = DataLoader(train_dataset, batch_size=batch_size,
+#                              drop_last=True, pin_memory=False, shuffle=True)
+#    val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
+#                            drop_last=False, pin_memory=False, shuffle=False)
+#    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
+#                             drop_last=False, pin_memory=False, shuffle=False)
 
     gnn = GAT(
         in_channels=1536,
@@ -123,8 +135,6 @@ def train(
         num_layers=num_gnn_layers,
         heads=4,
     )
-
-    gnn = gnn.to(accelerator.device)
 
     if not use_quantization:
         quantization_config=None
@@ -159,7 +169,7 @@ def train(
     if model_save_name == f'llm-{llama_version}':
         model = llm
     else:
-        model = GRetriever(llm=llm, gnn=gnn, use_lora=use_lora, lora_config=lora_config, accelerator=accelerator)
+        model = GRetriever(llm=llm, gnn=gnn, use_lora=use_lora, lora_config=lora_config)
 
     print(f"Model device is: {llm.device}")
 
@@ -279,7 +289,7 @@ if __name__ == '__main__':
     parser.add_argument('--checkpointing', action='store_true')
     parser.add_argument('--llama_version', type=str, required=True)
     parser.add_argument('--retrieval_config_version', type=int, default=0)
-    parser.add_argument('--algo_config_version', type=int, default=1)
+    parser.add_argument('--algo_config_version', type=int, default=0)
     parser.add_argument('--g_retriever_config_version', type=int, default=0)
     parser.add_argument('--freeze_llm', action='store_true') 
     parser.add_argument('--use_lora', action='store_true')

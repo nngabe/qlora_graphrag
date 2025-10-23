@@ -1,10 +1,20 @@
---checkpointing  --device cuda --llama_version llama3.2-3b --use_lora --use_quantization --freeze_llm --lora_rank 2048 --lora_alpha 1024 --algo_config 0 
---checkpointing  --device cuda --llama_version llama3.2-3b --use_lora --use_quantization --freeze_llm --lora_rank 2048 --lora_alpha 1024
---checkpointing  --device cuda --llama_version llama3.3-3b --use_lora --use_quantization --freeze_llm --lora_rank 1024 --lora_alpha 512
---checkpointing  --device cuda --llama_version llama3.2-3b --use_lora --use_quantization --freeze_llm --lora_rank 512 --lora_alpha 256
-#--checkpointing  --device cuda --llama_version llama3.2-1b 
-#--checkpointing  --device cuda --llama_version llama3.2-3b --use_quantization
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 1536 --lora_alpha 768 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 1408 --lora_alpha 704 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 1280 --lora_alpha 640 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 1152 --lora_alpha 576 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 1024 --lora_alpha 512 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 896 --lora_alpha 448 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 768 --lora_alpha 384 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 640 --lora_alpha 320 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 512 --lora_alpha 256 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 384 --lora_alpha 192 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 256 --lora_alpha 128 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 192 --lora_alpha 96 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 96 --lora_alpha 48 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 64 --lora_alpha 32 --algo_config 0
+--mixed_precision bf16 multi.py --checkpointing --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 32 --lora_alpha 16 --algo_config 0
 #--checkpointing  --device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 1024 --lora_alpha 512
+#--checkpointing  --device cuda --llama_version llama3.3-70b --use_lora --use_quantization --freeze_llm --lora_rank 512 --lora_alpha 256
 #--checkpointing  --device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 896 --lora_alpha 448
 #--checkpointing  --device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 512 --lora_alpha 256
 #--checkpointing  --device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 256 --lora_alpha 128

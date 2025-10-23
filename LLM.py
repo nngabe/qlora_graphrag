@@ -74,6 +74,7 @@ class LLM(torch.nn.Module):
         n_gpus: Optional[int] = None,
         sys_prompt: Optional[str] = None,
         quantization_config = None,
+        lora_config = None,
         accelerator = None,
     ) -> None:
         super().__init__()
@@ -82,10 +83,23 @@ class LLM(torch.nn.Module):
         self.device = accelerator.device
         self.autocast_context = accelerator.autocast #torch.amp.autocast(self.device, dtype=dtype)
         from transformers import AutoModelForCausalLM, AutoTokenizer
-        #kwargs['low_cpu_mem_usage'] = True
         kwargs = {}
+        #kwargs['low_cpu_mem_usage'] = True
         #kwargs['device_map'] = 'auto'
         #kwargs['torch_dtype'] = dtype
+        #kwargs = {'revision': 'main', 'max_memory': {0: '44GiB'}, 'low_cpu_mem_usage': True, 'device_map': 'auto', 'torch_dtype': torch.bfloat16}
+        with accelerator.main_process_first():
+            self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, dtype=torch.bfloat16) # device_map={'': accelerator.process_index})
+            #self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, device_map={'': accelerator.process_index}, dtype=torch.bfloat16)
+            #self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, **kwargs)
+        from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+
+        if quantization_config is not None:
+            self.llm = prepare_model_for_kbit_training(self.llm)
+        if lora_config is not None:
+            self.llm = get_peft_model(self.llm, lora_config)
+
+        self.word_embedding = self.llm.model.get_input_embeddings()
 
         print(f"Setting up '{model_name}' with configuration: {kwargs}")
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -113,10 +127,6 @@ class LLM(torch.nn.Module):
         if self.tokenizer.padding_side is None:
             self.tokenizer.padding_side = PADDING_SIDE
             
-        #print(f'accelerator.device = {accelerator.device}')
-        device = str(accelerator.device)
-        self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, device_map=accelerator.device, **kwargs)#.to(accelerator.device)
-        self.word_embedding = self.llm.model.get_input_embeddings()
         if sys_prompt is not None:
             self.sys_prompt = sys_prompt
         else:

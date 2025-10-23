@@ -1,6 +1,7 @@
 import argparse
 import math
 import os
+import gc
 import time
 from tqdm import tqdm
 
@@ -17,7 +18,7 @@ from torch_geometric import seed_everything
 from torch_geometric.nn.models import GAT
 
 from accelerate import Accelerator
-from peft import LoraConfig
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from transformers import BitsAndBytesConfig
 
 from LLM import LLM
@@ -101,12 +102,12 @@ def train(
         os.makedirs(f'{root_path}/models', exist_ok=True)
     else:
         root_path = f"stark_qa_v{retrieval_config_version}_{algo_config_version}"
-        train_dataset = STaRKQADataset(root_path, qa_raw_train, retrieval_config_version, algo_config_version, split="train").to(accelerator.device)
+        train_dataset = STaRKQADataset(root_path, qa_raw_train, retrieval_config_version, algo_config_version, split="train")#.to(accelerator.device)
         print(f'Finished loading train dataset in {time.time() - t} seconds.')
         print("Loading stark-qa prime val dataset...")
-        val_dataset = STaRKQADataset(root_path, qa_raw_val, retrieval_config_version, algo_config_version, split="val").to(accelerator.device)
+        val_dataset = STaRKQADataset(root_path, qa_raw_val, retrieval_config_version, algo_config_version, split="val")#.to(accelerator.device)
         print("Loading stark-qa prime test dataset...")
-        test_dataset = STaRKQADataset(root_path, qa_raw_test, retrieval_config_version, algo_config_version, split="test").to(accelerator.device)
+        test_dataset = STaRKQADataset(root_path, qa_raw_test, retrieval_config_version, algo_config_version, split="test")#.to(accelerator.device)
         os.makedirs(f'{root_path}/models', exist_ok=True)
 
 #    train_loader = DataLoader(train_dataset, batch_size=batch_size,
@@ -134,8 +135,6 @@ def train(
         heads=4,
     )
 
-    #gnn = gnn.to(accelerator.device)
-
     if not use_quantization:
         quantization_config=None
     print(f'\n use_quantization={use_quantization}\n quantization_config={quantization_config}\n')
@@ -147,12 +146,11 @@ def train(
     llm = LLM(
             model_name=llama_dict[llama_version],
             quantization_config=quantization_config,
-            accelerator=accelerator)
-    
-    print(f'llm.device = {llm.llm.device}')
-    print(f'accelerator.device = {accelerator.device}')
-    #if llm.llm.device != 'meta':
-    #    llm = llm.to(accelerator.device)
+            lora_config=lora_config,
+            accelerator=accelerator).to(accelerator.device)
+
+    #gnn = accelerator.prepare(gnn)
+    #llm = accelerator.prepare(llm)
 
     if args.freeze_llm:
         print(f'freeze_llm={args.freeze_llm}, freezing llm... \n')
@@ -180,15 +178,18 @@ def train(
         num_training_steps=len(train_loader)*num_epochs,
     )
 
-
-    model = accelerator.prepare(model)
+    print(f"Model parameters before prepare: {set(p.device.type for p in model.parameters())}")
+    llm_ = accelerator.prepare(llm.llm)
+    llm = accelerator.prepare(llm)
+    gnn = accelerator.prepare(gnn)
+    #model = accelerator.prepare(model)
     optimizer = accelerator.prepare(optimizer)
     scheduler = accelerator.prepare(scheduler)
     train_loader = accelerator.prepare(train_loader)
     #model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler) 
-    model, optimizer, train_loader, scheduler = accelerator.prepare(
-        model, optimizer, train_loader, scheduler
-    )
+    #model, optimizer, train_loader, scheduler = accelerator.prepare(
+    #    model, optimizer, train_loader, scheduler
+    #)
 
     best_epoch = 0
     best_val_loss = float('inf')
@@ -200,12 +201,14 @@ def train(
             start_time = time.time()
             print("Training beginning...")
         epoch_str = f'Epoch: {epoch + 1}|{num_epochs}'
-        loader = tqdm(train_loader, desc=epoch_str)
+        #loader = tqdm(train_loader, desc=epoch_str)
         
         #if torch.cuda.is_available():
         #    torch.cuda.reset_max_memory_allocated()
 
-        for step, batch in enumerate(loader):
+        #for step, batch in enumerate(loader):
+        for step,batch in enumerate(train_loader):
+            if step == 11: break
             optimizer.zero_grad()
             loss = get_loss(model, batch, model_save_name)
             accelerator.backward(loss)
@@ -215,15 +218,17 @@ def train(
             optimizer.step()
             epoch_loss = epoch_loss + float(loss)
             
-            if (step%100)==0:
+            if (step%5)==0:
                 if torch.cuda.is_available():
                     rank = int(str(accelerator.device)[-1])
-                    print(f'max_memory_allocated[{accelerator.device}]({step}/{loader.total}): {accelerate.utils.get_max_memory()[rank]/10**9:.2f} GB')
+                    print(f'max_memory_allocated[{accelerator.device}]({step}/{len(train_loader)}): {torch.cuda.max_memory_allocated()/10**9:.2f} GB')
 
         train_loss = epoch_loss / len(train_loader)
         print(epoch_str + f', Train Loss: {train_loss:4f}')
 
-
+        gc.collect()
+        torch.cuda.empty_cache()
+        
         val_loss = 0
         model.eval()
         with torch.no_grad():
@@ -282,7 +287,7 @@ if __name__ == '__main__':
     parser.add_argument('--checkpointing', action='store_true')
     parser.add_argument('--llama_version', type=str, required=True)
     parser.add_argument('--retrieval_config_version', type=int, default=0)
-    parser.add_argument('--algo_config_version', type=int, default=1)
+    parser.add_argument('--algo_config_version', type=int, default=0)
     parser.add_argument('--g_retriever_config_version', type=int, default=0)
     parser.add_argument('--freeze_llm', action='store_true') 
     parser.add_argument('--use_lora', action='store_true')
@@ -311,6 +316,7 @@ if __name__ == '__main__':
         bnb_4bit_quant_type="nf4",
         bnb_4bit_use_double_quant=True,
         bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_quant_storage=torch.bfloat16,
     )
 
     start_time = time.time()
