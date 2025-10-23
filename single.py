@@ -16,8 +16,8 @@ from peft import LoraConfig
 from transformers import BitsAndBytesConfig
 from tqdm import tqdm
 
-from gretriever.LLM import LLM
-from gretriever.GRetriever import GRetriever
+from LLM import LLM
+from GRetriever import GRetriever
 
 from gretriever.compute_metrics import compute_metrics
 
@@ -40,22 +40,6 @@ def inference_step(model, batch, model_save_name):
         return model.inference(batch.question, batch.x, batch.edge_index,
                                batch.batch, batch.edge_attr, batch.desc)
 
-def save_params_dict(model, save_path):
-    state_dict = model.state_dict()
-    param_grad_dict = {
-        k: v.requires_grad
-        for (k, v) in model.named_parameters()
-    }
-    for k in list(state_dict.keys()):
-        if k in param_grad_dict.keys() and not param_grad_dict[k]:
-            del state_dict[k]  # Delete parameters that do not require gradient
-    torch.save(state_dict, save_path)
-
-def load_params_dict(model, save_path):
-    state_dict = model.state_dict()
-    state_dict.update(torch.load(save_path)) #All weights might not be saved, eg when using LoRA.
-    model.load_state_dict(state_dict)
-    return model
 
 
 def train(
@@ -77,18 +61,6 @@ def train(
     sys_prompt=None,
     num_gpus=None
 ):
-    def adjust_learning_rate(param_group, LR, epoch):
-        # Decay the learning rate with half-cycle cosine after warmup
-        min_lr = 5e-6
-        warmup_epochs = 1
-        if epoch < warmup_epochs:
-            lr = LR
-        else:
-            lr = min_lr + (LR - min_lr) * 0.5 * (
-                    1.0 + math.cos(math.pi * (epoch - warmup_epochs) /
-                                   (num_epochs - warmup_epochs)))
-        param_group['lr'] = lr
-        return lr
 
     start_time = time.time()
     qa_dataset = load_qa("prime")
@@ -127,22 +99,22 @@ def train(
         test_dataset = STaRKQADataset(root_path, qa_raw_test, retrieval_config_version, algo_config_version, split="test")
         os.makedirs(f'{root_path}/models', exist_ok=True)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                              drop_last=True, pin_memory=False, shuffle=True,
-                              generator=torch.Generator(device=torch.get_default_device().type))
-    val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
-                            drop_last=False, pin_memory=False, shuffle=False,
-                            generator=torch.Generator(device=torch.get_default_device().type))
-    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
-                             drop_last=False, pin_memory=False, shuffle=False,
-                             generator=torch.Generator(device=torch.get_default_device().type))
-    
 #    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-#                              drop_last=True, pin_memory=False, shuffle=True)
+#                              drop_last=True, pin_memory=False, shuffle=True,
+#                              generator=torch.Generator(device=torch.get_default_device().type))
 #    val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
-#                            drop_last=False, pin_memory=False, shuffle=False)
+#                            drop_last=False, pin_memory=False, shuffle=False,
+#                            generator=torch.Generator(device=torch.get_default_device().type))
 #    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
-#                             drop_last=False, pin_memory=False, shuffle=False)
+#                             drop_last=False, pin_memory=False, shuffle=False,
+#                             generator=torch.Generator(device=torch.get_default_device().type))
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size,
+                              drop_last=True, pin_memory=False, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
+                            drop_last=False, pin_memory=False, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
+                             drop_last=False, pin_memory=False, shuffle=False)
 
     gnn = GAT(
         in_channels=1536,
@@ -152,7 +124,7 @@ def train(
         heads=4,
     )
 
-    gnn = gnn.to(torch.get_default_device().type)
+    gnn = gnn.to(accelerator.device)
 
     if not use_quantization:
         quantization_config=None
@@ -177,12 +149,7 @@ def train(
             model_name='meta-llama/Llama-3.2-3B-Instruct',
             quantization_config=quantization_config,
         )
-    
-#    llm.device = torch.get_default_device()
-#    llm = llm.to(torch.get_default_device().type)
-#    llm.llm = llm.llm.to(torch.get_default_device().type)
-#    llm.word_embedding = llm.llm.model.get_input_embeddings()
-#    print(llm.word_embedding(torch.tensor(1)))
+    #llm = AutoModelForCausalLM.from_pretrained('meta-llama/Llama-3.2-3B-Instruct', quantization_config=quantization_config)
 
     if args.freeze_llm:
         print(f'freeze_llm={args.freeze_llm}, freezing llm... \n')
@@ -192,7 +159,7 @@ def train(
     if model_save_name == f'llm-{llama_version}':
         model = llm
     else:
-        model = GRetriever(llm=llm, gnn=gnn, use_lora=use_lora, lora_config=lora_config)
+        model = GRetriever(llm=llm, gnn=gnn, use_lora=use_lora, lora_config=lora_config, accelerator=accelerator)
 
     print(f"Model device is: {llm.device}")
 

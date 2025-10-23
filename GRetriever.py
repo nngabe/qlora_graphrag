@@ -46,14 +46,19 @@ class GRetriever(torch.nn.Module):
         use_lora: bool = False,
         lora_config = None,
         mlp_out_tokens: int = 1,
+        accelerator=None,
     ) -> None:
         super().__init__()
 
         self.llm = llm
-        self.gnn = gnn.to(self.llm.device) if gnn is not None else None
-
+        self.device = accelerator.device if accelerator is not None else self.llm.device
+        self.gnn = gnn#.to(self.device) 
         self.word_embedding = self.llm.word_embedding
         self.llm_generator = self.llm.llm
+        print(f'accelerator: {accelerator.device}')
+        print(f'llm: {llm.llm.device}')#,{gnn.device}') 
+        #print(f'word_embedding: {llm.word_embedding.type}')
+        #print(f'llm: {self.llm.llm}')
         if use_lora:
             from peft import (
                 LoraConfig,
@@ -89,7 +94,7 @@ class GRetriever(torch.nn.Module):
                 torch.nn.Linear(mlp_hidden_channels,
                                 mlp_out_channels * mlp_out_tokens),
                 torch.nn.Unflatten(-1, (mlp_out_tokens, mlp_out_channels)),
-            ).to(self.llm.device)
+            )#.to(self.device)
 
         self.seq_length_stats = []
 
@@ -100,11 +105,11 @@ class GRetriever(torch.nn.Module):
         batch: Tensor,
         edge_attr: Optional[Tensor],
     ) -> Tensor:
-        x = x.to(self.llm.device)
-        edge_index = edge_index.to(self.llm.device)
+        #x = x.to(self.llm.device)
+        #edge_index = edge_index.to(self.llm.device)
         if edge_attr is not None:
             edge_attr = edge_attr.to(self.llm.device)
-        batch = batch.to(self.llm.device)
+        #batch = batch.to(self.llm.device)
 
         model_specific_kwargs = {}
 
@@ -170,7 +175,7 @@ class GRetriever(torch.nn.Module):
         max_seq_len = inputs_embeds.size(1)
         self.seq_length_stats.append(max_seq_len)
 
-        with self.llm.autocast_context:
+        with self.llm.autocast_context():
             outputs = self.llm_generator(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
@@ -234,7 +239,7 @@ class GRetriever(torch.nn.Module):
         #     add_special_tokens=False,
         # ).input_ids[0]
 
-        with self.llm.autocast_context:
+        with self.llm.autocast_context():
             outputs = self.llm_generator.generate(
                 inputs_embeds=inputs_embeds,
                 max_new_tokens=max_out_tokens,

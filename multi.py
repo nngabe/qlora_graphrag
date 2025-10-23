@@ -2,8 +2,9 @@ import argparse
 import math
 import os
 import time
+from tqdm import tqdm
 
-from accelerate import Accelerator
+import accelerate
 import torch
 import transformers
 
@@ -12,12 +13,12 @@ from torch_geometric.loader import DataLoader
 
 from stark_qa import load_qa
 from torch import Tensor
-from torch.nn.utils import clip_grad_norm_
 from torch_geometric import seed_everything
 from torch_geometric.nn.models import GAT
+
+from accelerate import Accelerator
 from peft import LoraConfig
 from transformers import BitsAndBytesConfig
-from tqdm import tqdm
 
 from LLM import LLM
 from GRetriever import GRetriever
@@ -26,6 +27,13 @@ from gretriever.compute_metrics import compute_metrics
 
 from gretriever.STaRKQADatasetGDS import STaRKQADataset
 from gretriever.STaRKQAVectorSearchDataset import STaRKQAVectorSearchDataset
+
+llama_dict = {'llama3.2-1b': 'meta-llama/Llama-3.2-1B-Instruct',
+              'llama3.2-3b': 'meta-llama/Llama-3.2-3B-Instruct',
+              'llama3.1-8b': 'meta-llama/Llama-3.1-8B-Instruct',
+              'llama3.3-70b': 'meta-llama/Llama-3.3-70B-Instruct'}
+ 
+
 
 def get_loss(model, batch, model_save_name) -> Tensor:
     if model_save_name.startswith('llm'):
@@ -42,23 +50,6 @@ def inference_step(model, batch, model_save_name):
     else:
         return model.inference(batch.question, batch.x, batch.edge_index,
                                batch.batch, batch.edge_attr, batch.desc)
-
-def save_params_dict(model, save_path):
-    state_dict = model.state_dict()
-    param_grad_dict = {
-        k: v.requires_grad
-        for (k, v) in model.named_parameters()
-    }
-    for k in list(state_dict.keys()):
-        if k in param_grad_dict.keys() and not param_grad_dict[k]:
-            del state_dict[k]  # Delete parameters that do not require gradient
-    torch.save(state_dict, save_path)
-
-def load_params_dict(model, save_path):
-    state_dict = model.state_dict()
-    state_dict.update(torch.load(save_path)) #All weights might not be saved, eg when using LoRA.
-    model.load_state_dict(state_dict)
-    return model
 
 
 def train(
@@ -110,30 +101,30 @@ def train(
         os.makedirs(f'{root_path}/models', exist_ok=True)
     else:
         root_path = f"stark_qa_v{retrieval_config_version}_{algo_config_version}"
-        train_dataset = STaRKQADataset(root_path, qa_raw_train, retrieval_config_version, algo_config_version, split="train")
+        train_dataset = STaRKQADataset(root_path, qa_raw_train, retrieval_config_version, algo_config_version, split="train").to(accelerator.device)
         print(f'Finished loading train dataset in {time.time() - t} seconds.')
         print("Loading stark-qa prime val dataset...")
-        val_dataset = STaRKQADataset(root_path, qa_raw_val, retrieval_config_version, algo_config_version, split="val")
+        val_dataset = STaRKQADataset(root_path, qa_raw_val, retrieval_config_version, algo_config_version, split="val").to(accelerator.device)
         print("Loading stark-qa prime test dataset...")
-        test_dataset = STaRKQADataset(root_path, qa_raw_test, retrieval_config_version, algo_config_version, split="test")
+        test_dataset = STaRKQADataset(root_path, qa_raw_test, retrieval_config_version, algo_config_version, split="test").to(accelerator.device)
         os.makedirs(f'{root_path}/models', exist_ok=True)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-                              drop_last=True, pin_memory=False, shuffle=True,
-                              generator=torch.Generator(device=torch.get_default_device().type))
-    val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
-                            drop_last=False, pin_memory=False, shuffle=False,
-                            generator=torch.Generator(device=torch.get_default_device().type))
-    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
-                             drop_last=False, pin_memory=False, shuffle=False,
-                             generator=torch.Generator(device=torch.get_default_device().type))
-    
 #    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-#                              drop_last=True, pin_memory=False, shuffle=True)
+#                              drop_last=True, pin_memory=False, shuffle=True,
+#                              generator=torch.Generator(device=accelerator.device))
 #    val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
-#                            drop_last=False, pin_memory=False, shuffle=False)
+#                              drop_last=False, pin_memory=False, shuffle=False,
+#                              generator=torch.Generator(device=accelerator.device))
 #    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
-#                             drop_last=False, pin_memory=False, shuffle=False)
+#                              drop_last=False, pin_memory=False, shuffle=False,
+#                              generator=torch.Generator(device=accelerator.device))
+    
+    train_loader = DataLoader(train_dataset, batch_size=batch_size,
+                              drop_last=True, pin_memory=False, shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
+                            drop_last=False, pin_memory=False, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
+                             drop_last=False, pin_memory=False, shuffle=False)
 
     gnn = GAT(
         in_channels=1536,
@@ -153,27 +144,16 @@ def train(
         lora_config=None
     print(f'\n use_lora={use_lora}\n lora_config={lora_config}\n')
     
-    if llama_version == 'llama3.2-1b':
-        llm = LLM(
-            model_name='meta-llama/Llama-3.2-1B-Instruct',
+    llm = LLM(
+            model_name=llama_dict[llama_version],
             quantization_config=quantization_config,
-        )
-    elif llama_version == 'llama3.2-3b':
-        llm = LLM(
-            model_name='meta-llama/Llama-3.2-3B-Instruct',
-            quantization_config=quantization_config,
-        )
-    elif llama_version == 'llama3.1-8b':
-        llm = LLM(
-            model_name='meta-llama/Llama-3.1-8B-Instruct',
-            quantization_config=quantization_config,
-        )
-    elif llama_version == 'llama3.3-70b':
-        llm = LLM(
-            model_name='meta-llama/Llama-3.3-70B-Instruct',
-            quantization_config=quantization_config,
-        )
+            accelerator=accelerator)
     
+    print(f'llm.device = {llm.llm.device}')
+    print(f'accelerator.device = {accelerator.device}')
+    #if llm.llm.device != 'meta':
+    #    llm = llm.to(accelerator.device)
+
     if args.freeze_llm:
         print(f'freeze_llm={args.freeze_llm}, freezing llm... \n')
         for param in llm.parameters():
@@ -182,11 +162,7 @@ def train(
     if model_save_name == f'llm-{llama_version}':
         model = llm
     else:
-        model = GRetriever(llm=llm, gnn=gnn, use_lora=use_lora, lora_config=lora_config)
-
-    print(f"Model device is: {llm.device}")
-    #model = model.to(accelerator.device)
-    print(f"Model device is: {GRetriever.device}")
+        model = GRetriever(llm=llm, gnn=gnn, use_lora=use_lora, lora_config=lora_config, accelerator=accelerator)
 
     params = [p for _, p in model.named_parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW([
@@ -204,6 +180,12 @@ def train(
         num_training_steps=len(train_loader)*num_epochs,
     )
 
+
+    model = accelerator.prepare(model)
+    optimizer = accelerator.prepare(optimizer)
+    scheduler = accelerator.prepare(scheduler)
+    train_loader = accelerator.prepare(train_loader)
+    #model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler) 
     model, optimizer, train_loader, scheduler = accelerator.prepare(
         model, optimizer, train_loader, scheduler
     )
@@ -220,8 +202,8 @@ def train(
         epoch_str = f'Epoch: {epoch + 1}|{num_epochs}'
         loader = tqdm(train_loader, desc=epoch_str)
         
-        if torch.cuda.is_available():
-            torch.cuda.reset_max_memory_allocated()
+        #if torch.cuda.is_available():
+        #    torch.cuda.reset_max_memory_allocated()
 
         for step, batch in enumerate(loader):
             optimizer.zero_grad()
@@ -235,7 +217,8 @@ def train(
             
             if (step%100)==0:
                 if torch.cuda.is_available():
-                    print(f'max_memory_allocated[{accelerator.device}]({step}/{loader.total}): {accelerate.utils.get_max_memory_allocated()/10**9:.2f} GB')
+                    rank = int(str(accelerator.device)[-1])
+                    print(f'max_memory_allocated[{accelerator.device}]({step}/{loader.total}): {accelerate.utils.get_max_memory()[rank]/10**9:.2f} GB')
 
         train_loss = epoch_loss / len(train_loader)
         print(epoch_str + f', Train Loss: {train_loss:4f}')
@@ -253,22 +236,20 @@ def train(
             print("Checkpointing best model...")
             best_val_loss = val_loss
             best_epoch = epoch
-            save_params_dict(model, f'{root_path}/models/{retrieval_config_version}_{algo_config_version}_{g_retriever_config_version}_{model_save_name}_best_val_loss_ckpt.pt')
+            accelerator.save_model(model, root_path)
+            #save_params_dict(model, f'{root_path}/models/{retrieval_config_version}_{algo_config_version}_{g_retriever_config_version}_{model_save_name}_best_val_loss_ckpt.pt')
     
 
     if checkpointing and best_epoch != num_epochs - 1:
         print("Loading best checkpoint...")
-        model = load_params_dict(
-            model,
-            f'{root_path}/models/{retrieval_config_version}_{algo_config_version}_{g_retriever_config_version}_{model_save_name}_best_val_loss_ckpt.pt',
-        )
+        accelerator.load_state()
 
     model.eval()
     eval_output = []
     print("Final evaluation...")
     progress_bar_test = tqdm(range(len(test_loader)))
     for step, batch in enumerate(test_loader):
-        batch = batch.to(torch.get_default_device().type)
+        #batch = batch.to(torch.get_default_device().type)
         with torch.no_grad():
             pred_time = time.time()
             pred = inference_step(model, batch, model_save_name)

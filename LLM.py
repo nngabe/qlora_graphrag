@@ -72,38 +72,20 @@ class LLM(torch.nn.Module):
         model_name: str,
         num_params: Optional[float] = None,
         n_gpus: Optional[int] = None,
-        dtype: Optional[torch.dtype] = torch.bfloat16,
         sys_prompt: Optional[str] = None,
         quantization_config = None,
+        accelerator = None,
     ) -> None:
         super().__init__()
 
         self.model_name = model_name
-
+        self.device = accelerator.device
+        self.autocast_context = accelerator.autocast #torch.amp.autocast(self.device, dtype=dtype)
         from transformers import AutoModelForCausalLM, AutoTokenizer
-        if n_gpus is None:
-            if num_params is None:
-                from huggingface_hub import get_safetensors_metadata
-                safetensors_metadata = get_safetensors_metadata(model_name)
-                param_count = safetensors_metadata.parameter_count
-                num_params = float(list(param_count.values())[0] // 10**9)
-
-            # A rough heuristic on GPU memory requirements, e.g., we found that
-            # LLAMA3 (8B parameters) fits on a 96GB GPU.
-            required_memory = 24.0 * num_params / 8.0
-            kwargs = get_llm_kwargs(required_memory, dtype)
-        else:
-            gpu_memory: List[int] = []
-            for i in range(n_gpus):
-                gpu_memory.append(torch.cuda.mem_get_info(i)[0] // 1024**3)
-            kwargs = dict(revision='main')
-            kwargs['max_memory'] = {
-                i: f'{memory}GiB'
-                for i, memory in enumerate(gpu_memory)
-            }
-            kwargs['low_cpu_mem_usage'] = True
-            kwargs['device_map'] = 'auto'
-            kwargs['torch_dtype'] = dtype
+        #kwargs['low_cpu_mem_usage'] = True
+        kwargs = {}
+        #kwargs['device_map'] = 'auto'
+        #kwargs['torch_dtype'] = dtype
 
         print(f"Setting up '{model_name}' with configuration: {kwargs}")
         self.tokenizer = AutoTokenizer.from_pretrained(
@@ -130,31 +112,31 @@ class LLM(torch.nn.Module):
             self.tokenizer.pad_token_id = PAD_TOKEN_ID
         if self.tokenizer.padding_side is None:
             self.tokenizer.padding_side = PADDING_SIDE
-        if quantization_config is None:
-            self.llm = AutoModelForCausalLM.from_pretrained(model_name, **kwargs)
-        else:
-            self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, **kwargs)
+            
+        #print(f'accelerator.device = {accelerator.device}')
+        device = str(accelerator.device)
+        self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, device_map=accelerator.device, **kwargs)#.to(accelerator.device)
         self.word_embedding = self.llm.model.get_input_embeddings()
         if sys_prompt is not None:
             self.sys_prompt = sys_prompt
         else:
             self.sys_prompt = ""
-        if 'max_memory' not in kwargs:  # Pure CPU:
-            warnings.warn(
-                "LLM is being used on CPU, which may be slow. This decision "
-                "was made by a rough hueristic that assumes your GPU set up "
-                "does not have enough GPU RAM. This is done to avoid GPU OOM "
-                "errors. If you think this is a mistake, please initialize "
-                "your LLM with the n_gpus param to dictate how many gpus to "
-                "use for the LLM.", stacklevel=2)
-            self.device = torch.device('cpu')
-            self.autocast_context = nullcontext()
-        else:
-            self.device = self.llm.device
-            if dtype == torch.float32:
-                self.autocast_context = nullcontext()
-            else:
-                self.autocast_context = torch.amp.autocast('cuda', dtype=dtype)
+#        if 'max_memory' not in kwargs:  # Pure CPU:
+#            warnings.warn(
+#                "LLM is being used on CPU, which may be slow. This decision "
+#                "was made by a rough hueristic that assumes your GPU set up "
+#                "does not have enough GPU RAM. This is done to avoid GPU OOM "
+#                "errors. If you think this is a mistake, please initialize "
+#                "your LLM with the n_gpus param to dictate how many gpus to "
+#                "use for the LLM.", stacklevel=2)
+#            self.device = torch.device('cpu')
+#            self.autocast_context = nullcontext()
+#        else:
+#            self.device = self.llm.device
+#            if dtype == torch.float32:
+#                self.autocast_context = nullcontext()
+#            else:
+#                self.autocast_context = torch.amp.autocast('cuda', dtype=dtype)
 
     # legacy function - used for Llama 2 style prompting
     def _encode_inputs(
