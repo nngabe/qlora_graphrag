@@ -134,6 +134,8 @@ def train(
         num_layers=num_gnn_layers,
         heads=4,
     )
+    
+    #gnn = gnn.to(accelerator.device)
 
     if not use_quantization:
         quantization_config=None
@@ -147,21 +149,23 @@ def train(
             model_name=llama_dict[llama_version],
             quantization_config=quantization_config,
             lora_config=lora_config,
-            accelerator=accelerator).to(accelerator.device)
+            accelerator=accelerator)#.to(accelerator.device)
 
-    #gnn = accelerator.prepare(gnn)
-    #llm = accelerator.prepare(llm)
 
     if args.freeze_llm:
         print(f'freeze_llm={args.freeze_llm}, freezing llm... \n')
         for param in llm.parameters():
             param.requires_grad = False
+    
+    #gnn = accelerator.prepare(gnn)
+    #llm = accelerator.prepare(llm)
 
     if model_save_name == f'llm-{llama_version}':
         model = llm
     else:
         model = GRetriever(llm=llm, gnn=gnn, use_lora=use_lora, lora_config=lora_config, accelerator=accelerator)
 
+    
     params = [p for _, p in model.named_parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW([
         {
@@ -179,17 +183,11 @@ def train(
     )
 
     print(f"Model parameters before prepare: {set(p.device.type for p in model.parameters())}")
-    llm_ = accelerator.prepare(llm.llm)
-    llm = accelerator.prepare(llm)
-    gnn = accelerator.prepare(gnn)
-    #model = accelerator.prepare(model)
-    optimizer = accelerator.prepare(optimizer)
+    model, optimizer = accelerator.prepare(model, optimizer)
     scheduler = accelerator.prepare(scheduler)
     train_loader = accelerator.prepare(train_loader)
-    #model, optimizer, scheduler = accelerator.prepare(model, optimizer, scheduler) 
-    #model, optimizer, train_loader, scheduler = accelerator.prepare(
-    #    model, optimizer, train_loader, scheduler
-    #)
+    val_loader = accelerator.prepare(val_loader)
+    test_loader = accelerator.prepare(test_loader)
 
     best_epoch = 0
     best_val_loss = float('inf')
@@ -208,7 +206,7 @@ def train(
 
         #for step, batch in enumerate(loader):
         for step,batch in enumerate(train_loader):
-            if step == 11: break
+            if step == 101: break
             optimizer.zero_grad()
             loss = get_loss(model, batch, model_save_name)
             accelerator.backward(loss)

@@ -5,7 +5,7 @@ from torch import Tensor
 
 from torch_geometric.llm.models.llm import LLM, MAX_NEW_TOKENS
 from torch_geometric.utils import scatter
-
+import transformers
 
 class GRetriever(torch.nn.Module):
     r"""The G-Retriever model from the `"G-Retriever: Retrieval-Augmented
@@ -57,6 +57,8 @@ class GRetriever(torch.nn.Module):
         self.llm_generator = self.llm.llm
         print(f'accelerator: {accelerator.device}')
         print(f'llm: {llm.llm.device}')#,{gnn.device}') 
+
+        self.get_parameter_or_buffer = llm.get_parameter_or_buffer
 
         if self.gnn is not None:
             mlp_out_channels = llm.word_embedding.embedding_dim

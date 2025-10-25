@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Optional
 import torch
 from torch import Tensor
 
+import transformers
+
 try:
     from transformers.tokenization_utils_base import BatchEncoding
 except ImportError:
@@ -79,6 +81,7 @@ class LLM(torch.nn.Module):
     ) -> None:
         super().__init__()
 
+
         self.model_name = model_name
         self.device = accelerator.device
         self.autocast_context = accelerator.autocast #torch.amp.autocast(self.device, dtype=dtype)
@@ -89,9 +92,12 @@ class LLM(torch.nn.Module):
         #kwargs['torch_dtype'] = dtype
         #kwargs = {'revision': 'main', 'max_memory': {0: '44GiB'}, 'low_cpu_mem_usage': True, 'device_map': 'auto', 'torch_dtype': torch.bfloat16}
         with accelerator.main_process_first():
-            self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, dtype=torch.bfloat16) # device_map={'': accelerator.process_index})
+            self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config)#, dtype=torch.bfloat16) # device_map={'': accelerator.process_index})
             #self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, device_map={'': accelerator.process_index}, dtype=torch.bfloat16)
             #self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, **kwargs)
+
+        self.get_parameter_or_buffer = self.llm.get_parameter_or_buffer
+
         from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
         if quantization_config is not None:
