@@ -58,7 +58,7 @@ class GRetriever(torch.nn.Module):
         print(f'accelerator: {accelerator.device}')
         print(f'llm: {llm.llm.device}')#,{gnn.device}') 
 
-        self.get_parameter_or_buffer = llm.get_parameter_or_buffer
+#        self.get_parameter_or_buffer = llm.get_parameter_or_buffer
 
         if self.gnn is not None:
             mlp_out_channels = llm.word_embedding.embedding_dim

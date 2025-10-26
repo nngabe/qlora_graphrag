@@ -6,6 +6,7 @@ import torch
 from torch import Tensor
 
 import transformers
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
 try:
     from transformers.tokenization_utils_base import BatchEncoding
@@ -78,6 +79,8 @@ class LLM(torch.nn.Module):
         quantization_config = None,
         lora_config = None,
         accelerator = None,
+        use_flash_attn_2 = False,
+        max_seq_length = None,
     ) -> None:
         super().__init__()
 
@@ -91,14 +94,9 @@ class LLM(torch.nn.Module):
         #kwargs['device_map'] = 'auto'
         #kwargs['torch_dtype'] = dtype
         #kwargs = {'revision': 'main', 'max_memory': {0: '44GiB'}, 'low_cpu_mem_usage': True, 'device_map': 'auto', 'torch_dtype': torch.bfloat16}
-        with accelerator.main_process_first():
-            self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config)#, dtype=torch.bfloat16) # device_map={'': accelerator.process_index})
-            #self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, device_map={'': accelerator.process_index}, dtype=torch.bfloat16)
-            #self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, **kwargs)
-
-        self.get_parameter_or_buffer = self.llm.get_parameter_or_buffer
-
-        from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+        #with accelerator.main_process_first():
+        attn_implementation = 'flash_attention_2' if use_flash_attn_2 else 'eager'
+        self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, attn_implementation=attn_implementation)
 
         if quantization_config is not None:
             self.llm = prepare_model_for_kbit_training(self.llm)
@@ -111,6 +109,8 @@ class LLM(torch.nn.Module):
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_name,
             use_fast=False,
+            truncation=True,
+            max_length=max_seq_length
         )
         if self.tokenizer.chat_template and self.tokenizer.bos_token is None:
             dummy_convo = [

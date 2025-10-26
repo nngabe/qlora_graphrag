@@ -70,7 +70,9 @@ def train(
     quantization_config,
     checkpointing=False,
     sys_prompt=None,
-    accelerator=None 
+    accelerator=None,
+    use_flash_attn_2=False,
+    max_seq_length=None,
 ):
 
     start_time = time.time()
@@ -135,7 +137,7 @@ def train(
         heads=4,
     )
     
-    #gnn = gnn.to(accelerator.device)
+    gnn = gnn.to(torch.bfloat16)
 
     if not use_quantization:
         quantization_config=None
@@ -149,7 +151,10 @@ def train(
             model_name=llama_dict[llama_version],
             quantization_config=quantization_config,
             lora_config=lora_config,
-            accelerator=accelerator)#.to(accelerator.device)
+            accelerator=accelerator,
+            use_flash_attn_2=use_flash_attn_2,
+            max_seq_length=max_seq_length,
+        )
 
 
     if args.freeze_llm:
@@ -199,13 +204,13 @@ def train(
             start_time = time.time()
             print("Training beginning...")
         epoch_str = f'Epoch: {epoch + 1}|{num_epochs}'
-        #loader = tqdm(train_loader, desc=epoch_str)
+        loader = tqdm(train_loader, desc=epoch_str)
         
         #if torch.cuda.is_available():
         #    torch.cuda.reset_max_memory_allocated()
 
-        #for step, batch in enumerate(loader):
-        for step,batch in enumerate(train_loader):
+        for step, batch in enumerate(loader):
+        #for step,batch in enumerate(train_loader):
             if step == 101: break
             optimizer.zero_grad()
             loss = get_loss(model, batch, model_save_name)
@@ -280,8 +285,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_gnn_layers', type=int, default=4)
     parser.add_argument('--lr', type=float, default=1e-5)
     parser.add_argument('--epochs', type=int, default=2)
-    parser.add_argument('--batch_size', type=int, default=4)
-    parser.add_argument('--eval_batch_size', type=int, default=16)
+    parser.add_argument('--batch_size', type=int, default=2)
+    parser.add_argument('--eval_batch_size', type=int, default=2)
     parser.add_argument('--checkpointing', action='store_true')
     parser.add_argument('--llama_version', type=str, required=True)
     parser.add_argument('--retrieval_config_version', type=int, default=0)
@@ -289,14 +294,18 @@ if __name__ == '__main__':
     parser.add_argument('--g_retriever_config_version', type=int, default=0)
     parser.add_argument('--freeze_llm', action='store_true') 
     parser.add_argument('--use_lora', action='store_true')
+    parser.add_argument('--use_flash_attn_2', action='store_true')
     parser.add_argument('--use_quantization', action='store_true')
     parser.add_argument('--lora_rank', type=int, default=8)
     parser.add_argument('--lora_alpha', type=int, default=16)
     parser.add_argument('--init_lora_weights', type=str, default=True)
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=2)
+    parser.add_argument('--max_seq_length', type=int, default=2048)
+
     args = parser.parse_args()
     load_dotenv('db.env', override=True)
 
-    accelerator = Accelerator()
+    accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
     args.device = accelerator.device
 
     lora_config = LoraConfig(
@@ -336,6 +345,8 @@ if __name__ == '__main__':
         checkpointing=args.checkpointing,
         sys_prompt=None,
         accelerator=accelerator,
+        use_flash_attn_2=args.use_flash_attn_2,
+        max_seq_length=args.max_seq_length,
     )
     print(f"Total Time: {time.time() - start_time:2f}s")
 
