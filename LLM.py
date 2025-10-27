@@ -6,6 +6,7 @@ import torch
 from torch import Tensor
 
 import transformers
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
 try:
@@ -23,32 +24,6 @@ PADDING_SIDE = 'left'
 BOS = '<s>[INST]'
 EOS_USER = '[/INST]'
 EOS = '[/s]'
-
-
-def get_llm_kwargs(required_memory: int, dtype=torch.dtype) -> Dict[str, Any]:
-    torch.cuda.empty_cache()
-
-    gpu_memory: List[int] = []
-    for i in range(torch.cuda.device_count()):
-        gpu_memory.append(torch.cuda.mem_get_info(i)[0] // 1024**3)
-        # Use the minimum number of GPUs to fit the LLM on.
-        if sum(gpu_memory) >= required_memory:
-            break
-
-    if sum(gpu_memory) < required_memory:
-        gpu_memory = []  # If not enough VRAM, use pure CPU.
-
-    kwargs = dict(revision='main')
-    if len(gpu_memory) > 0:
-        kwargs['max_memory'] = {
-            i: f'{memory}GiB'
-            for i, memory in enumerate(gpu_memory)
-        }
-        kwargs['low_cpu_mem_usage'] = True
-        kwargs['device_map'] = 'auto'
-        kwargs['torch_dtype'] = dtype
-
-    return kwargs
 
 
 class LLM(torch.nn.Module):
@@ -79,23 +54,17 @@ class LLM(torch.nn.Module):
         quantization_config = None,
         lora_config = None,
         accelerator = None,
-        use_flash_attn_2 = False,
-        max_seq_length = None,
+        attn_implementation = 'eager',
+        max_seq_len = None,
     ) -> None:
         super().__init__()
 
 
         self.model_name = model_name
         self.device = accelerator.device
-        self.autocast_context = accelerator.autocast #torch.amp.autocast(self.device, dtype=dtype)
-        from transformers import AutoModelForCausalLM, AutoTokenizer
+        self.autocast_context = accelerator.autocast 
         kwargs = {}
-        #kwargs['low_cpu_mem_usage'] = True
-        #kwargs['device_map'] = 'auto'
-        #kwargs['torch_dtype'] = dtype
-        #kwargs = {'revision': 'main', 'max_memory': {0: '44GiB'}, 'low_cpu_mem_usage': True, 'device_map': 'auto', 'torch_dtype': torch.bfloat16}
-        #with accelerator.main_process_first():
-        attn_implementation = 'flash_attention_2' if use_flash_attn_2 else 'eager'
+        
         self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, attn_implementation=attn_implementation)
 
         if quantization_config is not None:
@@ -110,7 +79,7 @@ class LLM(torch.nn.Module):
             model_name,
             use_fast=False,
             truncation=True,
-            max_length=max_seq_length
+            max_length=max_seq_len
         )
         if self.tokenizer.chat_template and self.tokenizer.bos_token is None:
             dummy_convo = [
@@ -137,22 +106,6 @@ class LLM(torch.nn.Module):
             self.sys_prompt = sys_prompt
         else:
             self.sys_prompt = ""
-#        if 'max_memory' not in kwargs:  # Pure CPU:
-#            warnings.warn(
-#                "LLM is being used on CPU, which may be slow. This decision "
-#                "was made by a rough hueristic that assumes your GPU set up "
-#                "does not have enough GPU RAM. This is done to avoid GPU OOM "
-#                "errors. If you think this is a mistake, please initialize "
-#                "your LLM with the n_gpus param to dictate how many gpus to "
-#                "use for the LLM.", stacklevel=2)
-#            self.device = torch.device('cpu')
-#            self.autocast_context = nullcontext()
-#        else:
-#            self.device = self.llm.device
-#            if dtype == torch.float32:
-#                self.autocast_context = nullcontext()
-#            else:
-#                self.autocast_context = torch.amp.autocast('cuda', dtype=dtype)
 
     # legacy function - used for Llama 2 style prompting
     def _encode_inputs(
@@ -430,43 +383,6 @@ class LLM(torch.nn.Module):
                 labels=label_input_ids,
             )
         return outputs.loss
-
-    @torch.no_grad()
-    def inference(
-        self,
-        question: List[str],
-        context: Optional[List[str]] = None,
-        embedding: Optional[List[Tensor]] = None,
-        max_tokens: Optional[int] = MAX_NEW_TOKENS,
-    ) -> List[str]:
-        r"""The inference pass.
-
-        Args:
-            question (list[str]): The questions/prompts.
-            answer (list[str]): The answers/labels.
-            context (list[str], optional): Additional context to give to the
-                LLM, such as textified knowledge graphs. (default: :obj:`None`)
-            embedding (list[torch.Tensor], optional): RAG embedding
-                tensors, *i.e.* the embedded form of :obj:`context`. Either
-                :obj:`context` or :obj:`embedding` should be used, not
-                both. (default: :obj:`None`)
-            max_tokens (int, optional): How many tokens for the LLM to
-                generate. (default: :obj:`32`)
-        """
-        inputs_embeds, attention_mask, _ = self._get_embeds(
-            question, context, embedding)
-
-        with self.autocast_context:
-            outputs = self.llm.generate(
-                inputs_embeds=inputs_embeds,
-                bos_token_id=self.tokenizer.bos_token_id,
-                max_new_tokens=max_tokens,
-                attention_mask=attention_mask,
-                pad_token_id=self.tokenizer.eos_token_id,
-                use_cache=True,
-            )
-
-        return self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
 
     def __repr__(self) -> str:
         return f'{self.__class__.__name__}({self.model_name})'

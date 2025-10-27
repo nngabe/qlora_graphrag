@@ -40,6 +40,22 @@ def inference_step(model, batch, model_save_name):
         return model.inference(batch.question, batch.x, batch.edge_index,
                                batch.batch, batch.edge_attr, batch.desc)
 
+def save_params_dict(model, save_path):
+    state_dict = model.state_dict()
+    param_grad_dict = {
+        k: v.requires_grad
+        for (k, v) in model.named_parameters()
+    }
+    for k in list(state_dict.keys()):
+        if k in param_grad_dict.keys() and not param_grad_dict[k]:
+            del state_dict[k]  # Delete parameters that do not require gradient
+    torch.save(state_dict, save_path)
+
+def load_params_dict(model, save_path):
+    state_dict = model.state_dict()
+    state_dict.update(torch.load(save_path)) #All weights might not be saved, eg when using LoRA.
+    model.load_state_dict(state_dict)
+    return model
 
 
 def train(
@@ -121,13 +137,6 @@ def train(
                              drop_last=False, pin_memory=False, shuffle=False,
                              generator=torch.Generator(device=torch.get_default_device().type))
     
-#    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-#                              drop_last=True, pin_memory=False, shuffle=True)
-#    val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
-#                            drop_last=False, pin_memory=False, shuffle=False)
-#    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
-#                             drop_last=False, pin_memory=False, shuffle=False)
-
     gnn = GAT(
         in_channels=1536,
         hidden_channels=hidden_channels,
@@ -135,6 +144,8 @@ def train(
         num_layers=num_gnn_layers,
         heads=4,
     )
+
+    gnn = gnn.to(torch.get_default_device().type)
 
     if not use_quantization:
         quantization_config=None
@@ -159,7 +170,12 @@ def train(
             model_name='meta-llama/Llama-3.2-3B-Instruct',
             quantization_config=quantization_config,
         )
-    #llm = AutoModelForCausalLM.from_pretrained('meta-llama/Llama-3.2-3B-Instruct', quantization_config=quantization_config)
+    
+    llm.device = torch.get_default_device()
+    llm = llm.to(torch.get_default_device().type)
+    llm.llm = llm.llm.to(torch.get_default_device().type)
+    llm.word_embedding = llm.llm.model.get_input_embeddings()
+    print(llm.word_embedding(torch.tensor(1)))
 
     if args.freeze_llm:
         print(f'freeze_llm={args.freeze_llm}, freezing llm... \n')
@@ -221,11 +237,6 @@ def train(
 
         train_loss = epoch_loss / len(train_loader)
         print(epoch_str + f', Train Loss: {train_loss:4f}')
-
-        #if llm.device.type == "cuda":
-        #    if torch.cuda.is_available():
-        #        torch.cuda.empty_cache()
-        #        torch.cuda.reset_max_memory_allocated()
 
 
         val_loss = 0

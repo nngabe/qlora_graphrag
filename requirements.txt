@@ -1,3 +1,4 @@
+python == 3.11
 stark-qa
 neo4j 
 python-dotenv 
@@ -8,3 +9,4 @@ protobuf
 accelerate
 graphdatascience
 bitsandbytes
+peft

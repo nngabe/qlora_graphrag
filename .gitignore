@@ -4,6 +4,7 @@ scratch/
 .ipynb_checkpoints/
 db.env/
 *.pt
+*.safetensors
 __pycache__/
 gretriever/
 logs/1*

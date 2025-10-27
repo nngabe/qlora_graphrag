@@ -107,6 +107,7 @@ class GRetriever(torch.nn.Module):
         label: List[str],
         edge_attr: Optional[Tensor] = None,
         additional_text_context: Optional[List[str]] = None,
+        inference=False,
     ):
         r"""The forward pass.
 
@@ -146,6 +147,24 @@ class GRetriever(torch.nn.Module):
             attention_mask,
             label_input_ids,
         ) = self.llm._get_embeds(question, additional_text_context, xs, label)
+
+        if inference:
+            with self.llm.autocast_context():
+                outputs = self.llm_generator.generate(
+                    inputs_embeds=inputs_embeds,
+                    max_new_tokens=MAX_NEW_TOKENS,
+                    attention_mask=attention_mask,
+                    bos_token_id=self.llm.tokenizer.bos_token_id,
+                    pad_token_id=self.llm.tokenizer.eos_token_id,
+                    use_cache=True  # Important to set!
+                )
+
+            return self.llm.tokenizer.batch_decode(
+                outputs,
+                skip_special_tokens=True,
+            )
+
+
 
         max_seq_len = inputs_embeds.size(1)
         self.seq_length_stats.append(max_seq_len)

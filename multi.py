@@ -49,8 +49,8 @@ def inference_step(model, batch, model_save_name):
     if model_save_name.startswith('llm'):
         return model.inference(batch.question, batch.desc)
     else:
-        return model.inference(batch.question, batch.x, batch.edge_index,
-                               batch.batch, batch.edge_attr, batch.desc)
+        return model(batch.question, batch.x, batch.edge_index, batch.batch,
+                     batch.label, batch.edge_attr, batch.desc, inference=True)
 
 
 def train(
@@ -71,8 +71,8 @@ def train(
     checkpointing=False,
     sys_prompt=None,
     accelerator=None,
-    use_flash_attn_2=False,
-    max_seq_length=None,
+    attn_implementation='eager',
+    max_seq_len=None,
 ):
 
     start_time = time.time()
@@ -104,24 +104,15 @@ def train(
         os.makedirs(f'{root_path}/models', exist_ok=True)
     else:
         root_path = f"stark_qa_v{retrieval_config_version}_{algo_config_version}"
-        train_dataset = STaRKQADataset(root_path, qa_raw_train, retrieval_config_version, algo_config_version, split="train")#.to(accelerator.device)
+        model_dir = root_path+'/models'
+        train_dataset = STaRKQADataset(root_path, qa_raw_train, retrieval_config_version, algo_config_version, split="train")
         print(f'Finished loading train dataset in {time.time() - t} seconds.')
         print("Loading stark-qa prime val dataset...")
-        val_dataset = STaRKQADataset(root_path, qa_raw_val, retrieval_config_version, algo_config_version, split="val")#.to(accelerator.device)
+        val_dataset = STaRKQADataset(root_path, qa_raw_val, retrieval_config_version, algo_config_version, split="val")
         print("Loading stark-qa prime test dataset...")
-        test_dataset = STaRKQADataset(root_path, qa_raw_test, retrieval_config_version, algo_config_version, split="test")#.to(accelerator.device)
+        test_dataset = STaRKQADataset(root_path, qa_raw_test, retrieval_config_version, algo_config_version, split="test")
         os.makedirs(f'{root_path}/models', exist_ok=True)
-
-#    train_loader = DataLoader(train_dataset, batch_size=batch_size,
-#                              drop_last=True, pin_memory=False, shuffle=True,
-#                              generator=torch.Generator(device=accelerator.device))
-#    val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
-#                              drop_last=False, pin_memory=False, shuffle=False,
-#                              generator=torch.Generator(device=accelerator.device))
-#    test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
-#                              drop_last=False, pin_memory=False, shuffle=False,
-#                              generator=torch.Generator(device=accelerator.device))
-    
+   
     train_loader = DataLoader(train_dataset, batch_size=batch_size,
                               drop_last=True, pin_memory=False, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=eval_batch_size,
@@ -152,8 +143,8 @@ def train(
             quantization_config=quantization_config,
             lora_config=lora_config,
             accelerator=accelerator,
-            use_flash_attn_2=use_flash_attn_2,
-            max_seq_length=max_seq_length,
+            attn_implementation=attn_implementation,
+            max_seq_len=max_seq_len,
         )
 
 
@@ -162,8 +153,6 @@ def train(
         for param in llm.parameters():
             param.requires_grad = False
     
-    #gnn = accelerator.prepare(gnn)
-    #llm = accelerator.prepare(llm)
 
     if model_save_name == f'llm-{llama_version}':
         model = llm
@@ -206,12 +195,10 @@ def train(
         epoch_str = f'Epoch: {epoch + 1}|{num_epochs}'
         loader = tqdm(train_loader, desc=epoch_str)
         
-        #if torch.cuda.is_available():
-        #    torch.cuda.reset_max_memory_allocated()
+        if torch.cuda.is_available():
+            torch.cuda.reset_max_memory_allocated()
 
         for step, batch in enumerate(loader):
-        #for step,batch in enumerate(train_loader):
-            if step == 101: break
             optimizer.zero_grad()
             loss = get_loss(model, batch, model_save_name)
             accelerator.backward(loss)
@@ -221,7 +208,7 @@ def train(
             optimizer.step()
             epoch_loss = epoch_loss + float(loss)
             
-            if (step%5)==0:
+            if (step%500)==0:
                 if torch.cuda.is_available():
                     rank = int(str(accelerator.device)[-1])
                     print(f'max_memory_allocated[{accelerator.device}]({step}/{len(train_loader)}): {torch.cuda.max_memory_allocated()/10**9:.2f} GB')
@@ -244,20 +231,18 @@ def train(
             print("Checkpointing best model...")
             best_val_loss = val_loss
             best_epoch = epoch
-            accelerator.save_model(model, root_path)
-            #save_params_dict(model, f'{root_path}/models/{retrieval_config_version}_{algo_config_version}_{g_retriever_config_version}_{model_save_name}_best_val_loss_ckpt.pt')
-    
+            accelerator.save_model(model, model_dir)
+            accelerator.load_state(model_dir)
 
     if checkpointing and best_epoch != num_epochs - 1:
         print("Loading best checkpoint...")
-        accelerator.load_state()
+        accelerator.load_state(model_dir)
 
     model.eval()
     eval_output = []
     print("Final evaluation...")
     progress_bar_test = tqdm(range(len(test_loader)))
     for step, batch in enumerate(test_loader):
-        #batch = batch.to(torch.get_default_device().type)
         with torch.no_grad():
             pred_time = time.time()
             pred = inference_step(model, batch, model_save_name)
@@ -273,8 +258,8 @@ def train(
 
     compute_metrics(eval_output)
     print(f"Total Training Time: {time.time() - start_time:2f}s")
-    save_params_dict(model, f'{root_path}/models/{retrieval_config_version}_{algo_config_version}_{g_retriever_config_version}_{model_save_name}.pt')
-    torch.save(eval_output, f'{root_path}/models/{retrieval_config_version}_{algo_config_version}_{g_retriever_config_version}_{model_save_name}_eval_outs.pt')
+    accelerator.save_model(model, root_path)
+    torch.save(eval_output, f'{root_path}/models/{time.time()}_{model_save_name}_eval_outs.pt')
 
 
 if __name__ == '__main__':
@@ -294,13 +279,13 @@ if __name__ == '__main__':
     parser.add_argument('--g_retriever_config_version', type=int, default=0)
     parser.add_argument('--freeze_llm', action='store_true') 
     parser.add_argument('--use_lora', action='store_true')
-    parser.add_argument('--use_flash_attn_2', action='store_true')
+    parser.add_argument('--attn_implementation', type=str, default='flash_attention_2' if torch.backends.cuda.flash_sdp_enabled() else 'eager')
     parser.add_argument('--use_quantization', action='store_true')
     parser.add_argument('--lora_rank', type=int, default=8)
     parser.add_argument('--lora_alpha', type=int, default=16)
     parser.add_argument('--init_lora_weights', type=str, default=True)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=2)
-    parser.add_argument('--max_seq_length', type=int, default=2048)
+    parser.add_argument('--max_seq_len', type=int, default=2048)
 
     args = parser.parse_args()
     load_dotenv('db.env', override=True)
@@ -345,8 +330,8 @@ if __name__ == '__main__':
         checkpointing=args.checkpointing,
         sys_prompt=None,
         accelerator=accelerator,
-        use_flash_attn_2=args.use_flash_attn_2,
-        max_seq_length=args.max_seq_length,
+        attn_implementation=args.attn_implementation,
+        max_seq_len=args.max_seq_len,
     )
     print(f"Total Time: {time.time() - start_time:2f}s")
 
