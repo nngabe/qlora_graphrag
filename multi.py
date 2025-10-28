@@ -64,16 +64,33 @@ def train(
     retrieval_config_version,
     algo_config_version,
     g_retriever_config_version,
-    use_lora,
-    use_quantization,
-    lora_config,
-    quantization_config,
     checkpointing=False,
     sys_prompt=None,
-    accelerator=None,
     attn_implementation='eager',
     max_seq_len=None,
+    args=None,
 ):
+
+    accelerator=Accelerator()
+    args.device = accelerator.device
+
+    lora_config = LoraConfig(
+        init_lora_weights=args.init_lora_weights,
+        r=args.lora_rank,
+        lora_alpha=args.lora_alpha,
+        target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
+        lora_dropout=0.05,
+        bias="none",
+        task_type="CAUSAL_LM"
+    )
+
+    quantization_config = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_use_double_quant=True,
+        bnb_4bit_compute_dtype=torch.bfloat16,
+        bnb_4bit_quant_storage=torch.bfloat16,
+    )
 
     start_time = time.time()
     qa_dataset = load_qa("prime")
@@ -130,13 +147,13 @@ def train(
     
     #gnn = gnn.to(torch.bfloat16)
 
-    if not use_quantization:
+    if not args.use_quantization:
         quantization_config=None
-    print(f'\n use_quantization={use_quantization}\n quantization_config={quantization_config}\n')
+    print(f'\n use_quantization={args.use_quantization}\n quantization_config={quantization_config}\n')
     
-    if not use_lora:
+    if not args.use_lora:
         lora_config=None
-    print(f'\n use_lora={use_lora}\n lora_config={lora_config}\n')
+    print(f'\n use_lora={args.use_lora}\n lora_config={lora_config}\n')
     
     llm = LLM(
             model_name=llama_dict[llama_version],
@@ -157,7 +174,7 @@ def train(
     if model_save_name == f'llm-{llama_version}':
         model = llm
     else:
-        model = GRetriever(llm=llm, gnn=gnn, use_lora=use_lora, lora_config=lora_config, accelerator=accelerator)
+        model = GRetriever(llm=llm, gnn=gnn) 
 
     
     params = [p for _, p in model.named_parameters() if p.requires_grad]
@@ -170,10 +187,12 @@ def train(
     ], betas=(0.9, 0.95))
     grad_steps = 2
 
-    scheduler = transformers.get_cosine_schedule_with_warmup(
-        optimizer=optimizer,
-        num_warmup_steps=0,
-        num_training_steps=len(train_loader)*num_epochs,
+    scheduler = transformers.get_cosine_with_min_lr_schedule_with_warmup_lr_rate(
+            optimizer=optimizer,
+            num_warmup_steps=len(train_loader),
+            num_training_steps=len(train_loader)*num_epochs,
+            min_lr=lr/2.,
+            warmup_lr_rate=10./len(train_loader),
     )
 
     print(f"Model parameters before prepare: {set(p.device.type for p in model.parameters())}")
@@ -202,7 +221,7 @@ def train(
             optimizer.zero_grad()
             loss = get_loss(model, batch, model_save_name)
             accelerator.backward(loss)
-            if step%10 == 0:
+            if step%20 == 0:
                 ewma = loss.item() if step==0 else .9 * ewma + .1 * loss.item()
                 total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=float('inf'))
                 metrics = {'step': step, 'loss': ewma, 'grad_norm': total_norm.item(), 'lr': optimizer.param_groups[0]['lr']}
@@ -215,7 +234,6 @@ def train(
             
             if (step%500)==0:
                 if torch.cuda.is_available():
-                    rank = int(str(accelerator.device)[-1])
                     print(f'max_memory_allocated[{accelerator.device}]({step}/{len(train_loader)}): {torch.cuda.max_memory_allocated()/10**9:.2f} GB')
 
         train_loss = epoch_loss / len(train_loader)
@@ -287,7 +305,7 @@ if __name__ == '__main__':
     parser.add_argument('--attn_implementation', type=str, default='flash_attention_2' if torch.backends.cuda.flash_sdp_enabled() else 'eager')
     parser.add_argument('--use_quantization', action='store_true')
     parser.add_argument('--lora_rank', type=int, default=8)
-    parser.add_argument('--lora_alpha', type=int, default=16)
+    parser.add_argument('--lora_alpha', type=int, default=-1)
     parser.add_argument('--init_lora_weights', type=str, default=True)
     parser.add_argument('--gradient_accumulation_steps', type=int, default=2)
     parser.add_argument('--max_seq_len', type=int, default=2048)
@@ -295,26 +313,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
     load_dotenv('db.env', override=True)
 
-    accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
-    args.device = accelerator.device
+    if args.lora_alpha==-1:
+        args.lora_alpha = args.lora_rank//2
 
-    lora_config = LoraConfig(
-        init_lora_weights=args.init_lora_weights,
-        r=args.lora_rank,
-        lora_alpha=args.lora_alpha,
-        target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
-        lora_dropout=0.05,
-        bias="none",
-        task_type="CAUSAL_LM"
-    )
-
-    quantization_config = BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_quant_type="nf4",
-        bnb_4bit_use_double_quant=True,
-        bnb_4bit_compute_dtype=torch.bfloat16,
-        bnb_4bit_quant_storage=torch.bfloat16,
-    )
+    #accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
 
     start_time = time.time()
     train(
@@ -328,15 +330,11 @@ if __name__ == '__main__':
         retrieval_config_version=args.retrieval_config_version,
         algo_config_version=args.algo_config_version,
         g_retriever_config_version=args.g_retriever_config_version,
-        use_lora=args.use_lora,
-        use_quantization=args.use_quantization,
-        lora_config=lora_config,
-        quantization_config=quantization_config,
         checkpointing=args.checkpointing,
         sys_prompt=None,
-        accelerator=accelerator,
         attn_implementation=args.attn_implementation,
         max_seq_len=args.max_seq_len,
+        args=args,
     )
     print(f"Total Time: {time.time() - start_time:2f}s")
 

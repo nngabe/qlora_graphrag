@@ -43,20 +43,15 @@ class GRetriever(torch.nn.Module):
         self,
         llm: LLM,
         gnn: torch.nn.Module = None,
-        use_lora: bool = False,
-        lora_config = None,
         mlp_out_tokens: int = 1,
-        accelerator=None,
     ) -> None:
         super().__init__()
 
         self.llm = llm
-        self.device = accelerator.device if accelerator is not None else self.llm.device
+        #self.device = accelerator.device if accelerator is not None else self.llm.device
         self.gnn = gnn#.to(self.device) 
         self.word_embedding = self.llm.word_embedding
-        self.llm_generator = self.llm.llm
-        print(f'accelerator: {accelerator.device}')
-        print(f'llm: {llm.llm.device}')#,{gnn.device}') 
+        print(f'llm: {llm.llm.device}')
 
 #        self.get_parameter_or_buffer = llm.get_parameter_or_buffer
 
@@ -150,7 +145,7 @@ class GRetriever(torch.nn.Module):
 
         if inference:
             with self.llm.autocast_context():
-                outputs = self.llm_generator.generate(
+                outputs = self.llm.llm.generate(
                     inputs_embeds=inputs_embeds,
                     max_new_tokens=MAX_NEW_TOKENS,
                     attention_mask=attention_mask,
@@ -170,7 +165,7 @@ class GRetriever(torch.nn.Module):
         self.seq_length_stats.append(max_seq_len)
 
         with self.llm.autocast_context():
-            outputs = self.llm_generator(
+            outputs = self.llm.llm(
                 inputs_embeds=inputs_embeds,
                 attention_mask=attention_mask,
                 return_dict=True,
@@ -234,7 +229,7 @@ class GRetriever(torch.nn.Module):
         # ).input_ids[0]
 
         with self.llm.autocast_context():
-            outputs = self.llm_generator.generate(
+            outputs = self.llm.llm.generate(
                 inputs_embeds=inputs_embeds,
                 max_new_tokens=max_out_tokens,
                 attention_mask=attention_mask,

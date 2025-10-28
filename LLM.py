@@ -78,8 +78,8 @@ class LLM(torch.nn.Module):
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_name,
             use_fast=False,
-            truncation=True,
-            max_length=max_seq_len
+#            truncation=True,
+#            max_length=max_seq_len
         )
         if self.tokenizer.chat_template and self.tokenizer.bos_token is None:
             dummy_convo = [
