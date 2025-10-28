@@ -219,7 +219,11 @@ def train(
             optimizer.zero_grad()
             loss = get_loss(model, batch, model_save_name)
             loss.backward()
-            
+            if step%10 == 0:
+                ewma = loss.item() if step==0 else .9 * ewma + .1 * loss.item() 
+                total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=float('inf'))
+                metrics = {'step': step, 'loss': ewma, 'grad_norm': total_norm.item(), 'lr': optimizer.param_groups[0]['lr']}
+                tqdm.write(str(metrics))
             clip_grad_norm_(optimizer.param_groups[0]['params'], 0.1)
 
             if (step + 1) % grad_steps == 0:

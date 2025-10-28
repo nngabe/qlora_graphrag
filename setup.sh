@@ -4,7 +4,7 @@
 # cd qlora_graphrag/
 #source /opt/miniforge3/etc/profile.d/conda.sh
 
-export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:128,garbage_collection_threshold:0.6,expendable_segments:True"
+#export PYTORCH_CUDA_ALLOC_CONF="max_split_size_mb:128,garbage_collection_threshold:0.6,expendable_segments:True"
 
 alias lhtr='ls -lhtr'
 

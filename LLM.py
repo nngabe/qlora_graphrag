@@ -63,9 +63,9 @@ class LLM(torch.nn.Module):
         self.model_name = model_name
         self.device = accelerator.device
         self.autocast_context = accelerator.autocast 
-        kwargs = {}
+        kwargs = dict(revision='main')
         
-        self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, attn_implementation=attn_implementation)
+        self.llm = AutoModelForCausalLM.from_pretrained(model_name, quantization_config=quantization_config, attn_implementation=attn_implementation, **kwargs)
 
         if quantization_config is not None:
             self.llm = prepare_model_for_kbit_training(self.llm)

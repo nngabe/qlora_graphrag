@@ -128,7 +128,7 @@ def train(
         heads=4,
     )
     
-    gnn = gnn.to(torch.bfloat16)
+    #gnn = gnn.to(torch.bfloat16)
 
     if not use_quantization:
         quantization_config=None
@@ -172,7 +172,7 @@ def train(
 
     scheduler = transformers.get_cosine_schedule_with_warmup(
         optimizer=optimizer,
-        num_warmup_steps=len(train_loader),
+        num_warmup_steps=0,
         num_training_steps=len(train_loader)*num_epochs,
     )
 
@@ -202,10 +202,15 @@ def train(
             optimizer.zero_grad()
             loss = get_loss(model, batch, model_save_name)
             accelerator.backward(loss)
-
+            if step%10 == 0:
+                ewma = loss.item() if step==0 else .9 * ewma + .1 * loss.item()
+                total_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=float('inf'))
+                metrics = {'step': step, 'loss': ewma, 'grad_norm': total_norm.item(), 'lr': optimizer.param_groups[0]['lr']}
+                tqdm.write(str(metrics))
             accelerator.clip_grad_norm_(model.parameters(), max_norm=0.1)   
 
             optimizer.step()
+            scheduler.step()
             epoch_loss = epoch_loss + float(loss)
             
             if (step%500)==0:
@@ -270,8 +275,8 @@ if __name__ == '__main__':
     parser.add_argument('--num_gnn_layers', type=int, default=4)
     parser.add_argument('--lr', type=float, default=1e-5)
     parser.add_argument('--epochs', type=int, default=2)
-    parser.add_argument('--batch_size', type=int, default=2)
-    parser.add_argument('--eval_batch_size', type=int, default=2)
+    parser.add_argument('--batch_size', type=int, default=4)
+    parser.add_argument('--eval_batch_size', type=int, default=16)
     parser.add_argument('--checkpointing', action='store_true')
     parser.add_argument('--llama_version', type=str, required=True)
     parser.add_argument('--retrieval_config_version', type=int, default=0)
