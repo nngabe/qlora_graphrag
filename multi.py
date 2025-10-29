@@ -71,7 +71,7 @@ def train(
     args=None,
 ):
 
-    accelerator=Accelerator()
+    accelerator=Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
     args.device = accelerator.device
 
     lora_config = LoraConfig(
@@ -145,8 +145,6 @@ def train(
         heads=4,
     )
     
-    #gnn = gnn.to(torch.bfloat16)
-
     if not args.use_quantization:
         quantization_config=None
     print(f'\n use_quantization={args.use_quantization}\n quantization_config={quantization_config}\n')
@@ -178,14 +176,10 @@ def train(
 
     
     params = [p for _, p in model.named_parameters() if p.requires_grad]
-    optimizer = torch.optim.AdamW([
-        {
-            'params': params,
-            'lr': lr,
-            'weight_decay': 0.05
-        },
-    ], betas=(0.9, 0.95))
-    grad_steps = 2
+    if args.paged_adamw:
+        optimizer = bnb.optim.PagedAdamW8bit(params=params, lr=lr, betas=(0.9, 0.995), weight_decay=0.05)
+    else:
+        optimizer = bnb.optim.AdamW8bit(params=params, lr=lr, betas=(0.9, 0.995), weight_decay=0.05)
 
     scheduler = transformers.get_cosine_with_min_lr_schedule_with_warmup_lr_rate(
             optimizer=optimizer,
@@ -302,8 +296,9 @@ if __name__ == '__main__':
     parser.add_argument('--g_retriever_config_version', type=int, default=0)
     parser.add_argument('--freeze_llm', action='store_true') 
     parser.add_argument('--use_lora', action='store_true')
-    parser.add_argument('--attn_implementation', type=str, default='flash_attention_2' if torch.backends.cuda.flash_sdp_enabled() else 'eager')
+    parser.add_argument('--attn_implementation', type=str, default='eager')
     parser.add_argument('--use_quantization', action='store_true')
+    parser.add_argument('--paged_adamw', action='store_true')
     parser.add_argument('--lora_rank', type=int, default=8)
     parser.add_argument('--lora_alpha', type=int, default=-1)
     parser.add_argument('--init_lora_weights', type=str, default=True)
@@ -316,7 +311,6 @@ if __name__ == '__main__':
     if args.lora_alpha==-1:
         args.lora_alpha = args.lora_rank//2
 
-    #accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
 
     start_time = time.time()
     train(

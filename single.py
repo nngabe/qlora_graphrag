@@ -14,6 +14,7 @@ from torch_geometric import seed_everything
 from torch_geometric.nn.models import GAT
 from peft import LoraConfig
 from transformers import BitsAndBytesConfig
+import bitsandbytes as bnb
 from tqdm import tqdm
 
 from gretriever.LLM import LLM
@@ -75,7 +76,8 @@ def train(
     quantization_config,
     checkpointing=False,
     sys_prompt=None,
-    num_gpus=None
+    num_gpus=None,
+    args=None
 ):
     def adjust_learning_rate(param_group, LR, epoch):
         # Decay the learning rate with half-cycle cosine after warmup
@@ -170,6 +172,11 @@ def train(
             model_name='meta-llama/Llama-3.2-3B-Instruct',
             quantization_config=quantization_config,
         )
+    elif llama_version == 'llama3.3-70b':
+        llm = LLM(
+            model_name='meta-llama/Llama-3.3-70B-Instruct',
+            quantization_config=quantization_config,
+        )
     
     llm.device = torch.get_default_device()
     llm = llm.to(torch.get_default_device().type)
@@ -190,14 +197,13 @@ def train(
     print(f"Model device is: {llm.device}")
 
     params = [p for _, p in model.named_parameters() if p.requires_grad]
-    optimizer = torch.optim.AdamW([
-        {
-            'params': params,
-            'lr': lr,
-            'weight_decay': 0.05
-        },
-    ], betas=(0.9, 0.95))
+    if args.paged_adamw:
+        optimizer = bnb.optim.PagedAdamW8bit(params=params, lr=lr, betas=(0.9, 0.995), weight_decay=0.05)
+    else:
+        optimizer = bnb.optim.AdamW8bit(params=params, lr=lr, betas=(0.9, 0.995), weight_decay=0.05)
     grad_steps = 2
+
+    print(f'optimizer: {optimizer}')
 
     best_epoch = 0
     best_val_loss = float('inf')
@@ -309,6 +315,7 @@ if __name__ == '__main__':
     parser.add_argument('--freeze_llm', action='store_true') 
     parser.add_argument('--use_lora', action='store_true')
     parser.add_argument('--use_quantization', action='store_true')
+    parser.add_argument('--paged_adamw', action='store_true')
     parser.add_argument('--lora_rank', type=int, default=8)
     parser.add_argument('--lora_alpha', type=int, default=16)
     parser.add_argument('--init_lora_weights', type=str, default=True)
@@ -353,7 +360,8 @@ if __name__ == '__main__':
         quantization_config=quantization_config,
         checkpointing=args.checkpointing,
         sys_prompt=None,
-        num_gpus=None
+        num_gpus=None,
+        args=args,
     )
     print(f"Total Time: {time.time() - start_time:2f}s")
 
