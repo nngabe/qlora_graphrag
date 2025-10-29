@@ -15,5 +15,6 @@ conda create -n panther python=3.11
 conda activate panther
 python -m pip install -r requirements.txt 
 python -m pip install -U transformers peft accelerate bitsandbytes
-#MAX_JOBS=48 python -m pip -v install flash-attn --no-build-isolation # adjust MAX_JOBS for your system 
 sed -i '7c from langchain_text_splitters import RecursiveCharacterTextSplitter' /venv/panther/lib/python3.11/site-packages/stark_qa/tools/process_text.py
+
+#MAX_JOBS=48 python -m pip -v install flash-attn --no-build-isolation # adjust MAX_JOBS for your system 
