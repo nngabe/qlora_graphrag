@@ -1,6 +1,6 @@
-# LLM Finetuning: GraphRAG with GNN+LLM architecture (G-Retriever)
+# LLM Finetuning: GraphRAG with GNN+LLM architecture on STaRK-Prime Knowledge Graph
 
-This repo contains experiments for Knowledge Graph Retrieval with GNN+LLM models to improve RAG. We use the base GNN+LLM architecture [G-Retriever](https://arxiv.org/abs/2402.07630), and [STaRK-Prime KG Q&A](https://stark.stanford.edu/dataset_prime.html).
+This repo contains experiments for Knowledge Graph Retrieval with GNN+LLM models to improve Q&A performance on STaRK-Prime. We use the base GNN+LLM architecture [G-Retriever](https://arxiv.org/abs/2402.07630), and [STaRK-Prime KG Q&A](https://stark.stanford.edu/dataset_prime.html).
 
 This work is based on [neo4j-product-examples/neo4j-gnn-llm-example](https://github.com/neo4j-product-examples/neo4j-gnn-llm-example.git). We extend these results as follows:
 
