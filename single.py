@@ -17,6 +17,8 @@ from transformers import BitsAndBytesConfig
 import bitsandbytes as bnb
 from tqdm import tqdm
 
+from MPNN import MPNN
+
 from gretriever.LLM import LLM
 from gretriever.GRetriever import GRetriever
 
@@ -24,6 +26,10 @@ from gretriever.compute_metrics import compute_metrics
 
 from gretriever.STaRKQADatasetGDS import STaRKQADataset
 from gretriever.STaRKQAVectorSearchDataset import STaRKQAVectorSearchDataset
+
+def count_parameters(model):
+    count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return f'num_params: {str(count//1e+6)}M'
 
 def get_loss(model, batch, model_save_name) -> Tensor:
     if model_save_name.startswith('llm'):
@@ -138,16 +144,46 @@ def train(
     test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
                              drop_last=False, pin_memory=False, shuffle=False,
                              generator=torch.Generator(device=torch.get_default_device().type))
-    
-    gnn = GAT(
-        in_channels=1536,
-        hidden_channels=hidden_channels,
-        out_channels=1536,
-        num_layers=num_gnn_layers,
-        heads=4,
-    )
+   
+    if args.gnn=='gat':
+        gnn = GAT(
+            in_channels=1536,
+            hidden_channels=6144,
+            out_channels=1536,
+            num_layers=6,
+            heads=8,
+        )
+    elif args.gnn=='mpnn':
+        gnn = MPNN(
+            in_channels=1536,
+            hidden_channels=2048,
+            out_channels=1536,
+            num_layers=num_gnn_layers,
+            aggr=['sum','max','mean','var'],
+            dropout=0.05,
+            ffw_dim=2
+        )
+    elif args.gnn=='gat_big':
+        gnn = GAT(
+            in_channels=1536,
+            hidden_channels=8192,
+            out_channels=1536,
+            num_layers=6,
+            heads=16,
+        ).to(torch.bfloat16)
+    elif args.gnn='mpnn_big':
+        gnn = MPNN(
+            in_channels=1536,
+            hidden_channels=2048,
+            out_channels=1536,
+            num_layers=4,
+            aggr=['sum','max','mean','var'],
+            dropout=0.05
+            ffw_dim=4,
+        ).to(torch.bloat16)
 
     gnn = gnn.to(torch.get_default_device().type)
+
 
     if not use_quantization:
         quantization_config=None
@@ -182,7 +218,10 @@ def train(
     llm = llm.to(torch.get_default_device().type)
     llm.llm = llm.llm.to(torch.get_default_device().type)
     llm.word_embedding = llm.llm.model.get_input_embeddings()
-    print(llm.word_embedding(torch.tensor(1)))
+    print(f'\nllm.word_embedding(1)={llm.word_embedding(torch.tensor(1))}\n')
+
+    print(f'\n gnn trainable params: {count_parameters(gnn)}')
+    print(f'\nllm trainable params: {llm.llm.print_trainable_params()}')
 
     if args.freeze_llm:
         print(f'freeze_llm={args.freeze_llm}, freezing llm... \n')
@@ -194,7 +233,7 @@ def train(
     else:
         model = GRetriever(llm=llm, gnn=gnn, use_lora=use_lora, lora_config=lora_config)
 
-    print(f"Model device is: {llm.device}")
+    print(f"\nModel device is: {llm.device}\n")
 
     params = [p for _, p in model.named_parameters() if p.requires_grad]
     if args.paged_adamw:
@@ -203,7 +242,7 @@ def train(
         optimizer = bnb.optim.AdamW8bit(params=params, lr=lr, betas=(0.9, 0.995), weight_decay=0.05)
     grad_steps = 2
 
-    print(f'optimizer: {optimizer}')
+    print(f'optimizer: {optimizer}\n')
 
     best_epoch = 0
     best_val_loss = float('inf')
@@ -308,6 +347,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--eval_batch_size', type=int, default=16)
     parser.add_argument('--checkpointing', action='store_true')
+    parser.add_argument('--gnn', type=str, default='gat')
     parser.add_argument('--llama_version', type=str, required=True)
     parser.add_argument('--retrieval_config_version', type=int, default=0)
     parser.add_argument('--algo_config_version', type=int, default=0)

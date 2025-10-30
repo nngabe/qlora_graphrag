@@ -6,6 +6,8 @@ if [[ $# -eq 0 ]] ; then
     exit 0
 fi
 
+conda activate panther
+
 MAX_TIME=810000
 IFS=$'\n'
 m=$(cat $args_file | wc -l) # number of arguments in args.txt file

@@ -136,15 +136,25 @@ def train(
                             drop_last=False, pin_memory=False, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
                              drop_last=False, pin_memory=False, shuffle=False)
-
-    gnn = GAT(
-        in_channels=1536,
-        hidden_channels=hidden_channels,
-        out_channels=1536,
-        num_layers=num_gnn_layers,
-        heads=4,
-    )
     
+    if args.gnn=='gat':
+        gnn = GAT(
+            in_channels=1536,
+            hidden_channels=hidden_channels,
+            out_channels=1536,
+            num_layers=num_gnn_layers,
+            heads=4,
+        )
+    elif args.gnn=='mpnn':
+        gnn = MPNN(
+            in_channels=1536,
+            hidden_channels=hidden_channels,
+            out_channels=1536,
+            num_layers=num_gnn_layers,
+            aggr=['sum','max','mean','var'],
+            dropout=0.1,
+        )
+   
     if not args.use_quantization:
         quantization_config=None
     print(f'\n use_quantization={args.use_quantization}\n quantization_config={quantization_config}\n')
@@ -290,6 +300,7 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--eval_batch_size', type=int, default=16)
     parser.add_argument('--checkpointing', action='store_true')
+    parser.add_argument('--gnn', type=str, default='gat')
     parser.add_argument('--llama_version', type=str, required=True)
     parser.add_argument('--retrieval_config_version', type=int, default=0)
     parser.add_argument('--algo_config_version', type=int, default=0)
