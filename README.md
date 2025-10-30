@@ -27,13 +27,13 @@ git clone https://github.com/nngabe/qlora_graphrag.git
 cd qlora_graphrag/
 ```
 
-Then install the necessary dependencies and datasets with:
+Then install the necessary dependencies and datasets:
 
 ```
 source setup.sh
 ```
 
-To download Llama models you will need to login to huggingface using
+To download Llama models, you will need to login to huggingface using
 ```
 hf auth login --token YOUR_HF_TOKEN_WITH_LLAMA_ACCESS
 ```
