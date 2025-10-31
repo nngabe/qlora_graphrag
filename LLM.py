@@ -70,6 +70,8 @@ class LLM(torch.nn.Module):
         if quantization_config is not None:
             self.llm = prepare_model_for_kbit_training(self.llm)
         if lora_config is not None:
+            for param in self.llm.parameters():
+                param.requires_grad = False
             self.llm = get_peft_model(self.llm, lora_config)
 
         self.word_embedding = self.llm.model.get_input_embeddings()
@@ -78,8 +80,8 @@ class LLM(torch.nn.Module):
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_name,
             use_fast=False,
-#            truncation=True,
-#            max_length=max_seq_len
+            #truncation=True,
+            #max_length=max_seq_len,
         )
         if self.tokenizer.chat_template and self.tokenizer.bos_token is None:
             dummy_convo = [

@@ -8,6 +8,7 @@ from tqdm import tqdm
 import accelerate
 import torch
 import transformers
+import bitsandbytes as bnb
 
 from dotenv import load_dotenv
 from torch_geometric.loader import DataLoader
@@ -23,6 +24,7 @@ from transformers import BitsAndBytesConfig
 
 from LLM import LLM
 from GRetriever import GRetriever
+from MPNN import MPNN
 
 from gretriever.compute_metrics import compute_metrics
 
@@ -33,8 +35,10 @@ llama_dict = {'llama3.2-1b': 'meta-llama/Llama-3.2-1B-Instruct',
               'llama3.2-3b': 'meta-llama/Llama-3.2-3B-Instruct',
               'llama3.1-8b': 'meta-llama/Llama-3.1-8B-Instruct',
               'llama3.3-70b': 'meta-llama/Llama-3.3-70B-Instruct'}
- 
 
+def count_parameters(model):
+    count = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return f'num_params: {str(count//1e+6)}M'
 
 def get_loss(model, batch, model_save_name) -> Tensor:
     if model_save_name.startswith('llm'):
@@ -43,7 +47,6 @@ def get_loss(model, batch, model_save_name) -> Tensor:
         # calls forward for GRetriever
         return model(batch.question, batch.x, batch.edge_index, batch.batch,
                      batch.label, batch.edge_attr, batch.desc)
-
 
 def inference_step(model, batch, model_save_name):
     if model_save_name.startswith('llm'):
@@ -136,25 +139,44 @@ def train(
                             drop_last=False, pin_memory=False, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=eval_batch_size,
                              drop_last=False, pin_memory=False, shuffle=False)
-    
+
     if args.gnn=='gat':
         gnn = GAT(
             in_channels=1536,
-            hidden_channels=hidden_channels,
+            hidden_channels=6144,
             out_channels=1536,
-            num_layers=num_gnn_layers,
-            heads=4,
+            num_layers=6,
+            heads=8,
         )
     elif args.gnn=='mpnn':
         gnn = MPNN(
             in_channels=1536,
-            hidden_channels=hidden_channels,
+            hidden_channels=2048,
             out_channels=1536,
             num_layers=num_gnn_layers,
             aggr=['sum','max','mean','var'],
-            dropout=0.1,
+            dropout=0.05,
+            ffw_dim=2,
         )
-   
+    elif args.gnn=='gat_big':
+        gnn = GAT(
+            in_channels=1536,
+            hidden_channels=8192,
+            out_channels=1536,
+            num_layers=6,
+            heads=16,
+        ).to(torch.bfloat16)
+    elif args.gnn=='mpnn_big':
+        gnn = MPNN(
+            in_channels=1536,
+            hidden_channels=2048,
+            out_channels=1536,
+            num_layers=4,
+            aggr=['sum','max','mean','var'],
+            dropout=0.05,
+            ffw_dim=4,
+        ).to(torch.bloat16)    
+  
     if not args.use_quantization:
         quantization_config=None
     print(f'\n use_quantization={args.use_quantization}\n quantization_config={quantization_config}\n')
@@ -172,11 +194,8 @@ def train(
             max_seq_len=max_seq_len,
         )
 
-
-    if args.freeze_llm:
-        print(f'freeze_llm={args.freeze_llm}, freezing llm... \n')
-        for param in llm.parameters():
-            param.requires_grad = False
+    print(f'\n gnn trainable params: {count_parameters(gnn)}')
+    print(f'\n llm trainable params: {llm.llm.print_trainable_parameters()}')
     
 
     if model_save_name == f'llm-{llama_version}':
@@ -313,8 +332,8 @@ if __name__ == '__main__':
     parser.add_argument('--lora_rank', type=int, default=8)
     parser.add_argument('--lora_alpha', type=int, default=-1)
     parser.add_argument('--init_lora_weights', type=str, default=True)
-    parser.add_argument('--gradient_accumulation_steps', type=int, default=2)
-    parser.add_argument('--max_seq_len', type=int, default=2048)
+    parser.add_argument('--gradient_accumulation_steps', type=int, default=1)
+    parser.add_argument('--max_seq_len', type=int, default=128000)
 
     args = parser.parse_args()
     load_dotenv('db.env', override=True)

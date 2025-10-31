@@ -89,7 +89,6 @@ class GRetriever(torch.nn.Module):
             model_specific_kwargs['batch'] = batch
         else:
             model_specific_kwargs['edge_attr'] = edge_attr
-        print(f'edge_attr={edge_attr.shape}')
         out = self.gnn(x, edge_index, **model_specific_kwargs)
         return scatter(out, batch, dim=0, reduce='mean')
 

@@ -2,7 +2,7 @@ import torch
 import torch_geometric
 from torch_geometric.nn import MessagePassing
 from torch_geometric.nn.models import GAT,MLP
-from torch_geometric.nn.conv import SAGEConv, GATConv, EdgeConv
+from torch_geometric.nn.conv import SAGEConv, GATConv
 import torch.nn.functional as F
 
 
@@ -31,10 +31,8 @@ class EdgeConv(MessagePassing):
     def __repr__(self):
         return f"EdgeConv(in_features={self.in_features}, out_features={self.out_features}, aggr={self.aggr})"
 
-
-
 class MPNN(torch.nn.Module):
-    def __init__(self, in_channels, hidden_channels, out_channels, num_layers, conv='EdgeConv', aggr=['mean'], residual = True, dropout=0.5):
+    def __init__(self, in_channels, hidden_channels, out_channels, num_layers, aggr=['mean'], residual=True, dropout=0.5, ffw_dim=2):
         super().__init__()
 
         self.residual = residual
@@ -42,27 +40,23 @@ class MPNN(torch.nn.Module):
         self.in_channels = in_channels
         self.hidden_channels = hidden_channels
         self.out_channels = out_channels
-        self.num_layers = num_layers
-    
-        Conv = getattr(torch_geometric.nn.conv,conv)
-        if conv=='EdgeConv':
-            Conv = EdgeConv
+        conv = EdgeConv
 
-        self.conv = torch.nn.ModuleList()
-        self.project = torch.nn.ModuleList()
+        self.conv = torch.nn.ModuleList() # edge convolution message passing layers
+        self.project = torch.nn.ModuleList() # linear projection for residual connections
 
         # first layer
-        self.conv.append( Conv(in_channels, hidden_channels, aggr=aggr, dropout=dropout))
+        self.conv.append( conv(in_channels, hidden_channels, aggr=aggr, dropout=dropout, ffw_dim=ffw_dim))
         self.project.append( torch.nn.Linear(in_channels, hidden_channels))
-        
+
         # middle layers
         for _ in range(num_layers-2):
-            self.conv.append( Conv(hidden_channels, hidden_channels, aggr=aggr, dropout=dropout))
+            self.conv.append( conv(hidden_channels, hidden_channels, aggr=aggr, dropout=dropout, ffw_dim=ffw_dim))
             #self.project.append( torch.nn.Linear(hidden_channels, hidden_channels))
             self.project.append( torch.nn.Identity())
-        
+
         # output layers
-        self.conv.append( Conv(hidden_channels, out_channels, aggr=aggr, dropout=dropout))
+        self.conv.append( conv(hidden_channels, out_channels, aggr=aggr, dropout=dropout, ffw_dim=ffw_dim))
         self.project.append( torch.nn.Linear(hidden_channels, out_channels))
 
     def forward(self, x, edge_index, edge_attr=None):
@@ -75,11 +69,6 @@ class MPNN(torch.nn.Module):
             x = F.dropout(x, p=self.dropout, training=self.training)
         x = self.conv[-1](x, edge_index)
         return x
-
-    def __repr__(self):
-        return f"MPNN({self.in_channels}, {self.num_layers}x{self.hidden_channels}, {self.out_channels}, aggr={self.aggr})"
-
-
 
 if __name__ == '__main__':
 

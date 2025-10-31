@@ -161,7 +161,7 @@ def train(
             num_layers=num_gnn_layers,
             aggr=['sum','max','mean','var'],
             dropout=0.05,
-            ffw_dim=2
+            ffw_dim=2,
         )
     elif args.gnn=='gat_big':
         gnn = GAT(
@@ -170,17 +170,17 @@ def train(
             out_channels=1536,
             num_layers=6,
             heads=16,
-        ).to(torch.bfloat16)
-    elif args.gnn='mpnn_big':
+        )
+    elif args.gnn=='mpnn_big':
         gnn = MPNN(
             in_channels=1536,
             hidden_channels=2048,
             out_channels=1536,
             num_layers=4,
             aggr=['sum','max','mean','var'],
-            dropout=0.05
-            ffw_dim=4,
-        ).to(torch.bloat16)
+            dropout=0.05,
+            ffw_dim=2,
+        ).to(torch.bfloat16)
 
     gnn = gnn.to(torch.get_default_device().type)
 
@@ -220,8 +220,6 @@ def train(
     llm.word_embedding = llm.llm.model.get_input_embeddings()
     print(f'\nllm.word_embedding(1)={llm.word_embedding(torch.tensor(1))}\n')
 
-    print(f'\n gnn trainable params: {count_parameters(gnn)}')
-    print(f'\nllm trainable params: {llm.llm.print_trainable_params()}')
 
     if args.freeze_llm:
         print(f'freeze_llm={args.freeze_llm}, freezing llm... \n')
@@ -233,6 +231,9 @@ def train(
     else:
         model = GRetriever(llm=llm, gnn=gnn, use_lora=use_lora, lora_config=lora_config)
 
+    print(f'\n gnn trainable params: {count_parameters(model.gnn)}')
+    print(f'\n llm trainable params: {model.llm_generator.print_trainable_parameters()}')
+    
     print(f"\nModel device is: {llm.device}\n")
 
     params = [p for _, p in model.named_parameters() if p.requires_grad]
@@ -260,6 +261,7 @@ def train(
             torch.cuda.reset_max_memory_allocated()
 
         for step, batch in enumerate(loader):
+            if step==100: break
             batch = batch.to(torch.get_default_device().type)
             optimizer.zero_grad()
             loss = get_loss(model, batch, model_save_name)
@@ -343,7 +345,7 @@ if __name__ == '__main__':
     parser.add_argument('--gnn_hidden_channels', type=int, default=1536)
     parser.add_argument('--num_gnn_layers', type=int, default=4)
     parser.add_argument('--lr', type=float, default=1e-5)
-    parser.add_argument('--epochs', type=int, default=2)
+    parser.add_argument('--epochs', type=int, default=4)
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--eval_batch_size', type=int, default=16)
     parser.add_argument('--checkpointing', action='store_true')
@@ -357,13 +359,17 @@ if __name__ == '__main__':
     parser.add_argument('--use_quantization', action='store_true')
     parser.add_argument('--paged_adamw', action='store_true')
     parser.add_argument('--lora_rank', type=int, default=8)
-    parser.add_argument('--lora_alpha', type=int, default=16)
+    parser.add_argument('--lora_alpha', type=int, default=-1)
     parser.add_argument('--init_lora_weights', type=str, default=True)
     parser.add_argument('--device', type=str, required=True)
     args = parser.parse_args()
     load_dotenv('db.env', override=True)
 
+    if args.lora_alpha==-1:
+        args.lora_alpha = args.lora_rank//2
+
     torch.set_default_device(args.device)
+
 
     lora_config = LoraConfig(
         init_lora_weights=args.init_lora_weights,
