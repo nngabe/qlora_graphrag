@@ -4,11 +4,11 @@ This repo contains experiments for Knowledge Graph Retrieval (GraphRAG) with a G
 
 This work is based on [neo4j-product-examples/neo4j-gnn-llm-example](https://github.com/neo4j-product-examples/neo4j-gnn-llm-example.git). We extend these results as follows:
 
-1. Added support for model quantization and mixed precision QLoRA using `peft` and `bitsandbytes`.
-2. Enabled multi-gpu training with DDP/FSDP using `accelerate`.
-3. Added `bitsandbytes` 8-bit optimizers as defaults: `AdamW8Bit` or `PagedAdamW8Bit`. 
-4. Introduced an MPNN architecture with edge convolution and multiple aggregations to improve encoding of textualized Knowledge Graphs in `MPNN.py`.
-5. Using the above memory optimizations, finetuned MPNN+LLM with `Llama-70B` and QLoRA, significantly improving Q&A performance on STaRK-Prime.
+1. Add support for model quantization and mixed precision QLoRA using `peft` and `bitsandbytes`.
+2. Enable multi-gpu training with DDP/FSDP using `accelerate`.
+3. Add `bitsandbytes` 8-bit optimizers as defaults: `AdamW8Bit` or `PagedAdamW8Bit`. 
+4. Introduce an MPNN architecture with edge convolution and multiple aggregations to improve encoding of textualized Knowledge Graphs in `MPNN.py`.
+5. With a greatly reduced memory footprint and improved architecture, we finetune an MPNN+LLM with Llama-70B and QLoRA, significantly improving Q&A performance on STaRK-Prime Q&A benchmark.
 
 ## Architecture Overview
 
