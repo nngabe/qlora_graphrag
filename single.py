@@ -27,9 +27,13 @@ from gretriever.compute_metrics import compute_metrics
 from gretriever.STaRKQADatasetGDS import STaRKQADataset
 from gretriever.STaRKQAVectorSearchDataset import STaRKQAVectorSearchDataset
 
-def count_parameters(model):
-    count = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    return f'num_params: {str(count//1e+6)}M'
+def count_parameters(models):
+    if type(models)!=list:
+        models = [models]
+    count = 0
+    for model in models:
+        count += sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return f'{str(count//1e+6)}M'
 
 def get_loss(model, batch, model_save_name) -> Tensor:
     if model_save_name.startswith('llm'):
@@ -149,7 +153,7 @@ def train(
         gnn = GAT(
             in_channels=1536,
             hidden_channels=6144,
-            out_channels=1536,
+            out_channels=2048,
             num_layers=6,
             heads=8,
         )
@@ -157,8 +161,8 @@ def train(
         gnn = MPNN(
             in_channels=1536,
             hidden_channels=2048,
-            out_channels=1536,
-            num_layers=num_gnn_layers,
+            out_channels=2048,
+            num_layers=4,
             aggr=['sum','max','mean','var'],
             dropout=0.05,
             ffw_dim=2,
@@ -170,7 +174,7 @@ def train(
             out_channels=1536,
             num_layers=6,
             heads=16,
-        )
+        ).to(torch.bfloat16)
     elif args.gnn=='mpnn_big':
         gnn = MPNN(
             in_channels=1536,
@@ -229,10 +233,17 @@ def train(
     if model_save_name == f'llm-{llama_version}':
         model = llm
     else:
-        model = GRetriever(llm=llm, gnn=gnn, use_lora=use_lora, lora_config=lora_config)
+        model = GRetriever(llm=llm, gnn=gnn, use_lora=use_lora, lora_config=lora_config, gnn_out_tokens=args.gnn_out_tokens)
+    
+    print(model.gnn)
+    print(model.projector)
+    print(model.llm_generator)
 
-    print(f'\n gnn trainable params: {count_parameters(model.gnn)}')
-    print(f'\n llm trainable params: {model.llm_generator.print_trainable_parameters()}')
+
+    print(f'\n gnn trainable params: {count_parameters([model.gnn])}')
+    print(f'\n proj. trainable params: {count_parameters([model.projector])}')
+    print(f'\n llm trainable params: ',end='') 
+    model.llm_generator.print_trainable_parameters()
     
     print(f"\nModel device is: {llm.device}\n")
 
@@ -261,7 +272,6 @@ def train(
             torch.cuda.reset_max_memory_allocated()
 
         for step, batch in enumerate(loader):
-            if step==100: break
             batch = batch.to(torch.get_default_device().type)
             optimizer.zero_grad()
             loss = get_loss(model, batch, model_save_name)
@@ -350,6 +360,7 @@ if __name__ == '__main__':
     parser.add_argument('--eval_batch_size', type=int, default=16)
     parser.add_argument('--checkpointing', action='store_true')
     parser.add_argument('--gnn', type=str, default='gat')
+    parser.add_argument('--gnn_out_tokens', type=int, default=16)
     parser.add_argument('--llama_version', type=str, required=True)
     parser.add_argument('--retrieval_config_version', type=int, default=0)
     parser.add_argument('--algo_config_version', type=int, default=0)

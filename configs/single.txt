@@ -1,4 +1,4 @@
---device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 4096 --lora_alpha 2048 --epochs 4 --gnn mpnn
---device cuda --llama_version llama3.3-70b --use_lora --use_quantization --freeze_llm --lora_rank 512 --lora_alpha 256 --eval_batch_size 4 --epochs 4 --paged_adamw --gnn mpnn
---device cuda --llama_version llama3.3-70b --use_lora --use_quantization --freeze_llm --lora_rank 512 --lora_alpha 256 --eval_batch_size 4 --epochs 4 --paged_adamw
---device cuda --llama_version llama3.3-70b --use_lora --use_quantization --freeze_llm --lora_rank 768 --lora_alpha 384 --eval_batch_size 4 --epochs 4 --paged_adamw --gnn mpnn
+--device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 4096 --gnn mpnn
+--device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 4096 --gnn gat
+--device cuda --llama_version llama3.3-70b --use_lora --use_quantization --freeze_llm --lora_rank 512 --paged_adamw --gnn mpnn
+--device cuda --llama_version llama3.3-70b --use_lora --use_quantization --freeze_llm --lora_rank 512 --paged_adamw --gnn gat

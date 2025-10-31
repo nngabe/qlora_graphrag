@@ -70,6 +70,22 @@ class MPNN(torch.nn.Module):
         x = self.conv[-1](x, edge_index)
         return x
 
+class Proj(torch.nn.Module):
+    def __init__(self, in_dim, hidden_dim, out_dim, out_tokens, dropout = 0.):
+        super().__init__()
+        self.net = torch.nn.Sequential(
+            torch.nn.LayerNorm(in_dim),
+            torch.nn.Linear(in_dim, hidden_dim),
+            torch.nn.GELU(),
+            torch.nn.Dropout(dropout),
+            torch.nn.Linear(hidden_dim, out_dim*out_tokens),
+            torch.nn.Dropout(dropout),
+            torch.nn.Unflatten(-1, (out_tokens, out_dim))
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
 if __name__ == '__main__':
 
     conv = EdgeConv(1536,1536,aggr=['mean','max','sum','var','min'])
