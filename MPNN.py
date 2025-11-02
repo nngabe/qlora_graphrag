@@ -80,8 +80,11 @@ class Proj(torch.nn.Module):
             torch.nn.Dropout(dropout),
             torch.nn.Linear(hidden_dim, out_dim*out_tokens),
             torch.nn.Dropout(dropout),
-            torch.nn.Unflatten(-1, (out_tokens, out_dim))
+            torch.nn.Unflatten(-1, (out_tokens, out_dim)),
+            torch.nn.LayerNorm(out_dim),
         )
+        with torch.no_grad()
+            self.net[-1].weight.data *= 0.1
 
     def forward(self, x):
         return self.net(x)

@@ -17,7 +17,7 @@ from transformers import BitsAndBytesConfig
 import bitsandbytes as bnb
 from tqdm import tqdm
 
-from MPNN import MPNN
+from gretriever.MPNN import MPNN
 
 from gretriever.LLM import LLM
 from gretriever.GRetriever import GRetriever
@@ -355,12 +355,12 @@ if __name__ == '__main__':
     parser.add_argument('--gnn_hidden_channels', type=int, default=1536)
     parser.add_argument('--num_gnn_layers', type=int, default=4)
     parser.add_argument('--lr', type=float, default=1e-5)
-    parser.add_argument('--epochs', type=int, default=4)
+    parser.add_argument('--epochs', type=int, default=2)
     parser.add_argument('--batch_size', type=int, default=4)
     parser.add_argument('--eval_batch_size', type=int, default=16)
     parser.add_argument('--checkpointing', action='store_true')
     parser.add_argument('--gnn', type=str, default='gat')
-    parser.add_argument('--gnn_out_tokens', type=int, default=16)
+    parser.add_argument('--gnn_out_tokens', type=int, default=8)
     parser.add_argument('--llama_version', type=str, required=True)
     parser.add_argument('--retrieval_config_version', type=int, default=0)
     parser.add_argument('--algo_config_version', type=int, default=0)
@@ -387,7 +387,7 @@ if __name__ == '__main__':
         r=args.lora_rank,
         lora_alpha=args.lora_alpha,
         target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
-        lora_dropout=0.05,
+        lora_dropout=0.1,
         bias="none",
         task_type="CAUSAL_LM"
     )

@@ -7,4 +7,4 @@ db.env/
 *.safetensors
 __pycache__/
 gretriever/
-logs/1*
+logs/*
