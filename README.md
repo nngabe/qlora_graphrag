@@ -8,7 +8,11 @@ This work is based on [neo4j-product-examples/neo4j-gnn-llm-example](https://git
 2. Enable multi-gpu training with DDP/FSDP using `accelerate`.
 3. Add `bitsandbytes` 8-bit optimizers as defaults: `AdamW8Bit` or `PagedAdamW8Bit`. 
 4. Introduce an MPNN architecture with edge convolution and multiple aggregations to improve encoding of textualized Knowledge Graphs in `MPNN.py`.
-5. With a greatly reduced memory footprint and improved architecture, we finetune an MPNN+LLM with Llama-70B and QLoRA, significantly improving Q&A performance on STaRK-Prime Q&A benchmark.
+5. With a reduced memory footprint and improved architecture, we finetune MPNN+Llama-70B with QLoRA, which achieves competitive performance with a full finetune of GAT+Llama-8B on the STaRK-Prime Q&A benchmark.
+
+## Results
+
+![Results](qlora_graphrag.png)
 
 ## Architecture Overview
 
