@@ -13,10 +13,10 @@ This work is based on [neo4j-product-examples/neo4j-gnn-llm-example](https://git
 ## Architecture Overview
 
 The G-Retriever architecture has four main parts:
-1. A GraphRAG method for selecting the most relevant subgraph $`S^* = (V^*, E^*)`$ for a query.
-2. A GNN/MPNN for aggregating and encoding text embeddings associated with nodes $`V^*`$ and edges $`E^*`$ of the knowledge subgraph.
-3. A projection module to map the GNN output into a set of tokens.
-4. An LLM that takes the original query, context from all text in the subgraph, and tokens computed by the GNN/projection.
+1. GraphRAG retrieval for selecting the most relevant subgraph $`S^* = (V^*, E^*)`$ for a query. Subgraphs for this repo have been precomputed using Neo4j and can be downloaded with `get_precomputed_kg.py`
+2. GNN/MPNN for aggregating and encoding text embeddings associated with nodes $`V^*`$ and edges $`E^*`$ of the knowledge subgraph.
+3. A projection module to map the GNN/MPNN output into a set of tokens.
+4. An LLM that takes the original query, context from all text in the subgraph, and graph tokens computed by the GNN/projection.
 
 The GNN, Projection module, and LLM all have trainable parameters. For LORA/QLoRA training the base LLM parameters are frozen and only the `A`/`B` adapter matrices are trainable.
 
@@ -83,14 +83,12 @@ hf auth login --token YOUR_HF_TOKEN_WITH_LLAMA_ACCESS
 
 Lastly, to reproduce the results of the experiments run:
 ```
-python -u single.py --device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 4096 --lora_alpha 2048 --epochs 4
-python -u single.py --device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 4096 --lora_alpha 2048 --epochs 4 --gnn mpnn
-python -u single.py --device cuda --llama_version llama3.3-70b --use_lora --use_quantization --freeze_llm --lora_rank 512 --lora_alpha 256 --eval_batch_size 4 --epochs 4 --paged_adamw --gnn mpnn
+python -u single.py --device cuda --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 4096 --epochs 4 --gnn mpnn
+python -u single.py --device cuda --llama_version llama3.3-70b --use_lora --use_quantization --freeze_llm --lora_rank 512 --epochs 4 --paged_adamw --gnn mpnn
 ```
 or on multi-gpu nodes:
 ```
-accelerate launch --config_file configs/fsdp.yaml multi.py --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 4096 --lora_alpha 2048 --epochs 4
 accelerate launch --config_file configs/fsdp.yaml multi.py --llama_version llama3.1-8b --use_lora --use_quantization --freeze_llm --lora_rank 4096 --lora_alpha 2048 --epochs 4 --gnn mpnn
-accelerate launch --config_file configs/fsdp.yaml multi.py --llama_version llama3.3-70b --use_lora --use_quantization --freeze_llm --lora_rank 512 --lora_alpha 256 --eval_batch_size 4 --epochs 4 --paged_adamw --gnn mpnn
+accelerate launch --config_file configs/fsdp.yaml multi.py --llama_version llama3.3-70b --use_lora --use_quantization --freeze_llm --lora_rank 512 --lora_alpha 256 --epochs 4 --paged_adamw --gnn mpnn
 ```
 
