@@ -55,7 +55,7 @@ which improves training stability of training and token scaling for compatibilty
 
 ## Results
 
-We finetune two QLoRA models for comparison with the original full finetune in [neo4j-product-examples/neo4j-gnn-llm-example](https://github.com/neo4j-product-examples/neo4j-gnn-llm-example.git). While full finetuning of the `GAT+Llama-8B` still achieves the best results for the for the first returned answer (i.e.,`Hits@1` and `MRR`) each of the QLoRA finetunes nearly matches this performance with a fraction of the parameters. Notably, the MPNN architecture improves performance on questions with multiple answers (i.e., `Hits@5` and `Recall@20`) by reducing oversquashing/bottlenecking of the original GAT network, and hence more relevant information from the knowledge subgraph can be used to inform answers.
+We finetune two QLoRA models for comparison with the original full finetune (`GAT+Llama-8B`) in [neo4j-product-examples/neo4j-gnn-llm-example](https://github.com/neo4j-product-examples/neo4j-gnn-llm-example.git). While full finetuning of the `GAT+Llama-8B` still achieves the best results for the for the first returned answer (i.e.,`Hits@1` and `MRR`) each of the QLoRA finetunes nearly matches this performance with a fraction of the parameters. Notably, the MPNN architecture improves performance on questions with multiple answers (i.e., `Hits@5` and `Recall@20`) by reducing oversquashing/bottlenecking of the original GAT network, and hence more relevant information from the knowledge subgraph can be used to inform answers.
 
 ![Results](qlora_graphrag.png)
 
