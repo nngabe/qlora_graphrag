@@ -36,7 +36,7 @@ MPNN(
 )
 ```
 
-Additionally, we improve the projection module by replacing the 2-layer MLP with a Transformer style FFN (with extra post LaterNorm). e.g. mapping a `dim=2048` MPNN output to a set of `8` tokens of `embeddding_dim=4096` for Llama-8B as:
+Additionally, we improve the projection module by replacing the 2-layer MLP with a Transformer style FFN (with extra post-LN for token scaling). e.g. mapping a `dim=2048` MPNN output to a set of `8` tokens of `embeddding_dim=4096` for Llama-8B as:
 ```
 Proj(
   (net): Sequential(
