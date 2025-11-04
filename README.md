@@ -20,7 +20,7 @@ The G-Retriever architecture has four main parts:
 
 The GNN, Projection module, and LLM all have trainable parameters. For LORA/QLoRA training the base LLM parameters are frozen and only the `A`/`B` adapter matrices are trainable.
 
-We improve the graph encoding step by replacing the GAT network with a more expressive MPNN. Our MPNN implementation uses `EdgeConv` layers[[1](https://arxiv.org/abs/1801.07829)] to consider relative distances between node embeddings in the knowledge subgraph and multiple aggregations[[2](https://arxiv.org/abs/2004.05718)] to improve expressive power, i.e.
+We improve the graph encoding step by replacing the GAT network with a more expressive MPNN. Our MPNN implementation uses `EdgeConv` layers[[1](https://arxiv.org/abs/1801.07829)] to consider relative distances between node embeddings in the knowledge subgraph and multiple aggregations[[2](https://arxiv.org/abs/2004.05718)] to improve expressive power, and residual connections to improve gradient flow and reduce oversmoothing, i.e. 
 
 ```
 MPNN(
@@ -36,7 +36,7 @@ MPNN(
 )
 ```
 
-Additionally, we improve the projection module by replacing the 2-layer MLP with a Transformer style FFN (with extra post-LN for token scaling). e.g. mapping a `dim=2048` MPNN output to a set of `8` tokens of `embeddding_dim=4096` for Llama-8B as:
+Additionally, we improve the projection module by replacing the 2-layer MLP with a Transformer style FFN (with extra post-LN for token scaling). e.g. mapping a `dim=2048` MPNN output to a set of `8` tokens of `embedding_dim=4096` for Llama-8B as:
 ```
 Proj(
   (net): Sequential(
