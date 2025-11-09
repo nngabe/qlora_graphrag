@@ -13,7 +13,7 @@ This work is based on [neo4j-product-examples/neo4j-gnn-llm-example](https://git
 ## Architecture Overview
 
 The G-Retriever architecture has four main parts:
-1. GraphRAG retrieval for selecting the most relevant subgraph $`S^* = (V^*, E^*)`$ for a query. The retrieval uses a modified Prize Collecting Steiner Tree (PCST) algorithm with prizes determined by semantic similarity of nodes and edge text to the initial query. Subgraphs for this repo have been precomputed using Neo4j and can be downloaded with `get_precomputed_kg.py`
+1. GraphRAG retrieval for selecting the most relevant subgraph $`S^* = (V^*, E^*)`$ for a query. The retrieval uses a modified Prize Collecting Steiner Tree (PCST) algorithm with prizes determined by semantic similarity of nodes and edge text to the initial query. Subgraphs for this repo have been precomputed using Neo4j and can be downloaded with `get_precomputed_kg.py`, which saves ~2 hours of time to collect the subgraphs for each query.
 2. GNN/MPNN for aggregating and encoding text embeddings associated with nodes $`V^*`$ and edges $`E^*`$ of the knowledge subgraph.
 3. A projection module to map the GNN/MPNN output into a set of tokens.
 4. An LLM that takes the original query, context from all text in the subgraph, and graph tokens computed by the GNN/projection.
