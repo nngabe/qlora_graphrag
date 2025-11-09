@@ -13,12 +13,12 @@ This work is based on [neo4j-product-examples/neo4j-gnn-llm-example](https://git
 ## Architecture Overview
 
 The G-Retriever architecture has four main parts:
-1. GraphRAG retrieval for selecting the most relevant subgraph $`S^* = (V^*, E^*)`$ for a query. Subgraphs for this repo have been precomputed using Neo4j and can be downloaded with `get_precomputed_kg.py`
+1. GraphRAG retrieval for selecting the most relevant subgraph $`S^* = (V^*, E^*)`$ for a query. The retrieval uses a modified Prize Collecting Steiner Tree (PCST) algorithm with prizes determined by semantic similarity of nodes and edges to the initial query. Subgraphs for this repo have been precomputed using Neo4j and can be downloaded with `get_precomputed_kg.py`
 2. GNN/MPNN for aggregating and encoding text embeddings associated with nodes $`V^*`$ and edges $`E^*`$ of the knowledge subgraph.
 3. A projection module to map the GNN/MPNN output into a set of tokens.
 4. An LLM that takes the original query, context from all text in the subgraph, and graph tokens computed by the GNN/projection.
 
-The GNN, Projection module, and LLM all have trainable parameters. For LORA/QLoRA training the base LLM parameters are frozen and only the `A`/`B` adapter matrices are trainable.
+The GNN, Projection module, and LLM all have trainable parameters. For LORA/QLoRA training, the base LLM parameters are frozen and only the `A`/`B` adapter matrices are trainable.
 
 We improve the graph encoding step by replacing the GAT network with a more expressive MPNN. Our MPNN implementation uses `EdgeConv` layers[[1](https://arxiv.org/abs/1801.07829)] to consider relative distances between node embeddings in the knowledge subgraph and multiple aggregations[[2](https://arxiv.org/abs/2004.05718)] to improve expressive power, and residual connections to improve gradient flow and reduce oversmoothing, i.e. 
 
@@ -51,7 +51,7 @@ Proj(
   )
 )
 ```
-which improves training stability of training and token scaling for compatibilty with text based tokens.
+which improves training stability and token scaling for compatibilty with text based tokens.
 
 ## Results
 
